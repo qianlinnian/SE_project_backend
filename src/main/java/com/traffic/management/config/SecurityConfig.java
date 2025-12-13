@@ -55,7 +55,7 @@ public class SecurityConfig {
                 // 配置请求授权
                 .authorizeHttpRequests(auth -> auth
                         // 公开接口
-                        .requestMatchers("/api/auth/**", "/api/health", "/api/").permitAll()
+                        .requestMatchers("/api/auth/**", "/api/health", "/api/", "/api/redis-test/**", "/api/intersections/**", "/api/dashboard/**", "/api/violations/**").permitAll()
                         // 其他所有请求需要认证
                         .anyRequest().authenticated()
                 )
