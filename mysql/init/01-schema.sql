@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS violations (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '违章记录ID，主键',
     intersection_id BIGINT NOT NULL COMMENT '路口ID，外键关联intersections表',
     plate_number VARCHAR(20) NOT NULL COMMENT '车牌号',
-    violation_type ENUM('RED_LIGHT', 'WRONG_WAY', 'ILLEGAL_LANE') NOT NULL COMMENT '违章类型：RED_LIGHT-闯红灯，WRONG_WAY-逆行，ILLEGAL_LANE-违法变道',
+    violation_type ENUM('RED_LIGHT', 'WRONG_WAY', 'ILLEGAL_LANE', 'SPEEDING', 'PARKING_VIOLATION', 'OTHER') NOT NULL COMMENT '违章类型：RED_LIGHT-闯红灯，WRONG_WAY-逆行，ILLEGAL_LANE-违法变道，SPEEDING-超速，PARKING_VIOLATION-停车违规，OTHER-其他',
     image_url VARCHAR(255) NOT NULL COMMENT '违章抓拍图片URL（OSS外部链接，暂无OSS时可为占位符）',
     ai_confidence FLOAT(5, 4) COMMENT 'AI识别置信度（0-1之间，如0.9523表示95.23%置信度）',
     occurred_at DATETIME NOT NULL COMMENT '违章发生时间',
