@@ -1,0 +1,160 @@
+# TrafficMind API 测试集合
+# 使用 VS Code REST Client 插件执行
+# 插件安装：搜索 "REST Client" by Huachao Mao
+
+### 变量定义
+@baseUrl = http://localhost:8081/api
+@token = YOUR_TOKEN_HERE
+
+###############################################
+# 0. 健康检查
+###############################################
+
+### 健康检查
+GET {{baseUrl}}/health
+
+###############################################
+# Module 1: 用户与权限管理
+###############################################
+
+### 1. 用户登录（获取 Token）
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "password123"
+}
+
+### 提取 Token（执行上面的登录后，会自动设置到变量）
+@token = {{login.response.body.data.accessToken}}
+
+### 2. 获取当前用户信息
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+### 3. 用户登出
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{token}}
+
+###############################################
+# Module 1: 管理员 - 交警管理
+###############################################
+
+### 4. 创建交警账号
+POST {{baseUrl}}/admin/police
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "username": "police_test01",
+  "password": "password123",
+  "fullName": "测试交警",
+  "policeNumber": "PC0001"
+}
+
+### 5. 获取交警列表（分页）
+GET {{baseUrl}}/admin/police?page=1&size=10
+Authorization: Bearer {{token}}
+
+### 6. 启用/停用交警账号（替换 {id} 为实际用户ID）
+PUT {{baseUrl}}/admin/police/2/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "SUSPENDED"
+}
+
+### 7. 恢复交警账号
+PUT {{baseUrl}}/admin/police/2/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "ACTIVE"
+}
+
+###############################################
+# Module 4: 智能信号灯控制
+###############################################
+
+### 8. 调整信号灯配置（路口ID=1）
+POST {{baseUrl}}/signals/1/adjust
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "mode": "INTELLIGENT",
+  "greenDuration": 45,
+  "reason": "Traffic congestion detected"
+}
+
+### 9. 查询单个路口信号灯配置
+GET {{baseUrl}}/signals/1/config
+Authorization: Bearer {{token}}
+
+### 10. 查询所有路口信号灯配置
+GET {{baseUrl}}/signals
+Authorization: Bearer {{token}}
+
+### 11. 手动模式调整信号灯
+POST {{baseUrl}}/signals/1/adjust
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "mode": "MANUAL",
+  "greenDuration": 60,
+  "redDuration": 30,
+  "yellowDuration": 3,
+  "reason": "晚高峰手动调整"
+}
+
+### 12. 固定模式调整信号灯
+POST {{baseUrl}}/signals/1/adjust
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "mode": "FIXED",
+  "greenDuration": 30,
+  "redDuration": 30,
+  "yellowDuration": 3,
+  "reason": "夜间固定模式"
+}
+
+###############################################
+# 其他可选测试
+###############################################
+
+### MinIO 健康检查
+GET http://localhost:9000/minio/health/live
+
+###############################################
+# 测试说明
+###############################################
+
+# 使用方法：
+# 1. 确保后端应用已启动（java -jar target/management-1.0.0.jar）
+# 2. 点击"Send Request"执行请求
+# 3. 首次需要执行"用户登录"获取 Token
+# 4. Token 会自动保存到 @token 变量，后续请求自动使用
+# 5. 如需重新登录，再次执行登录请求即可
+
+# 预期响应格式：
+# {
+#   "code": 200,
+#   "message": "success",
+#   "data": { ... },
+#   "timestamp": "2025-12-13T23:00:00"
+# }
+
+# 常见错误码：
+# 40001 - 参数校验失败
+# 40003 - 认证失败（Token无效或过期）
+# 40004 - 权限不足
+# 40006 - 用户名或密码错误
+# 40009 - 用户名已存在
+# 50000 - 服务器内部错误

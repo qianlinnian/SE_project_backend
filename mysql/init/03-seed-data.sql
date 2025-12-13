@@ -16,13 +16,15 @@ USE traffic_mind;
 -- ============================================================
 -- 1. 插入测试用户（1个管理员 + 4个交警）
 -- 密码统一为：password123（BCrypt加密后的哈希值）
+-- 哈希生成自: BCryptPasswordEncoder with strength 10
+-- 验证链接: https://bcrypt-generator.com/ 或在线验证工具
 -- ============================================================
 INSERT INTO users (username, password_hash, full_name, role, police_number, status) VALUES
-('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', 'ADMIN', NULL, 'ACTIVE'),
-('police001', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '张三', 'POLICE', 'JH001', 'ACTIVE'),
-('police002', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '李四', 'POLICE', 'JH002', 'ACTIVE'),
-('police003', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '王五', 'POLICE', 'JH003', 'ACTIVE'),
-('police004', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '赵六', 'POLICE', 'JH004', 'SUSPENDED');
+('admin', '$2b$10$5Zng5L.mHicdDHtQr3Tny.3q2DKHgXtHaD..W8noB0veT7o/.Z4Mi', '系统管理员', 'ADMIN', NULL, 'ACTIVE'),
+('police001', '$2b$10$5Zng5L.mHicdDHtQr3Tny.3q2DKHgXtHaD..W8noB0veT7o/.Z4Mi', '张三', 'POLICE', 'JH001', 'ACTIVE'),
+('police002', '$2b$10$5Zng5L.mHicdDHtQr3Tny.3q2DKHgXtHaD..W8noB0veT7o/.Z4Mi', '李四', 'POLICE', 'JH002', 'ACTIVE'),
+('police003', '$2b$10$5Zng5L.mHicdDHtQr3Tny.3q2DKHgXtHaD..W8noB0veT7o/.Z4Mi', '王五', 'POLICE', 'JH003', 'ACTIVE'),
+('police004', '$2b$10$5Zng5L.mHicdDHtQr3Tny.3q2DKHgXtHaD..W8noB0veT7o/.Z4Mi', '赵六', 'POLICE', 'JH004', 'SUSPENDED');
 
 -- ============================================================
 -- 2. 插入测试路口（8个监控点位）

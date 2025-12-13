@@ -45,6 +45,51 @@ services:
     environment:
       ADMINER_DEFAULT_SERVER: traffic-db
 
+  # Redis - 缓存及Token存储
+  redis:
+    image: redis:7-alpine
+    container_name: traffic_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      # 数据持久化：使用AOF日志
+      - ./redis/data:/data
+    networks:
+      - traffic-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO - 对象存储服务（用于存储违章图片）
+  minio:
+    image: minio/minio:latest
+    container_name: traffic_minio
+    restart: always
+    ports:
+      - "9000:9000"  # MinIO API接口
+      - "9001:9001"  # MinIO Web管理界面（Console）
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      TZ: ${TIMEZONE}
+    volumes:
+      # 数据持久化：挂载本地数据目录
+      - ./minio/data:/minio/data
+    networks:
+      - traffic-network
+    command: server /minio/data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - redis
+
 networks:
   traffic-network:
     driver: bridge
