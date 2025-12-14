@@ -1,0 +1,255 @@
+# TrafficMind API 测试集合
+# 使用 VS Code REST Client 插件执行
+
+### 变量定义
+@baseUrl = http://localhost:8081/api
+@token = YOUR_TOKEN_HERE
+@contentType = application/json
+
+###############################################
+# 0. 健康检查
+###############################################
+
+### 健康检查
+GET {{baseUrl}}/health
+
+###############################################
+# Module 1: 用户与权限管理
+###############################################
+
+### 1. 用户登录（获取 Token）
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "username": "admin",
+  "password": "password123"
+}
+
+### 提取 Token
+@token = {{login.response.body.data.accessToken}}
+
+### 2. 获取当前用户信息
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+### 3. 用户登出
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{token}}
+
+###############################################
+# Module 1: 管理员 - 交警管理
+###############################################
+
+### 4. 创建交警账号
+POST {{baseUrl}}/admin/police
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "username": "police_test01",
+  "password": "password123",
+  "fullName": "测试交警",
+  "policeNumber": "PC0001"
+}
+
+### 5. 获取交警列表（分页）
+GET {{baseUrl}}/admin/police?page=1&size=10
+Authorization: Bearer {{token}}
+
+### 6. 启用/停用交警账号
+PUT {{baseUrl}}/admin/police/2/status
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "status": "SUSPENDED"
+}
+
+### 7. 恢复交警账号
+PUT {{baseUrl}}/admin/police/2/status
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "status": "ACTIVE"
+}
+
+###############################################
+# Module 1: Redis 测试 API (From Postman)
+###############################################
+
+### 1.1 设置路口流量状态
+POST {{baseUrl}}/redis-test/traffic/intersection-1
+Content-Type: {{contentType}}
+
+### 1.2 获取路口流量状态
+GET {{baseUrl}}/redis-test/traffic/intersection-1
+
+### 1.3 增加违章计数
+POST {{baseUrl}}/redis-test/violation
+
+### 1.4 获取违章总数
+GET {{baseUrl}}/redis-test/violations
+
+###############################################
+# Module 2: 交通监控 API (From Postman)
+###############################################
+
+### 2.1 获取所有路口列表
+GET {{baseUrl}}/intersections
+
+### 2.2 设置路口数据（测试用）
+POST {{baseUrl}}/intersections/intersection-1
+Content-Type: {{contentType}}
+
+{
+  "flow": 150,
+  "status": "NORMAL",
+  "timestamp": 1702400000,
+  "congestionLevel": 2
+}
+
+### 2.3 获取路口实时数据
+GET {{baseUrl}}/intersections/intersection-1/realtime
+
+### 2.4 设置统计数据（测试用）
+POST {{baseUrl}}/dashboard/stats
+Content-Type: {{contentType}}
+
+{
+  "totalViolations": 150,
+  "averageCongestionLevel": 2.5,
+  "peakHours": "08:00-09:00, 17:00-18:00",
+  "safeIntersections": 10,
+  "problematicIntersections": 3
+}
+
+### 2.5 获取统计数据
+GET {{baseUrl}}/dashboard/stats
+
+### 2.6 设置热力图数据（测试用）
+POST {{baseUrl}}/dashboard/heatmap
+Content-Type: {{contentType}}
+
+[
+  {
+    "latitude": 39.9042,
+    "longitude": 116.4074,
+    "congestionLevel": 3,
+    "name": "东直门交叉口"
+  },
+  {
+    "latitude": 39.9084,
+    "longitude": 116.4065,
+    "congestionLevel": 2,
+    "name": "朝阳门交叉口"
+  },
+  {
+    "latitude": 39.9027,
+    "longitude": 116.4074,
+    "congestionLevel": 1,
+    "name": "建国门交叉口"
+  }
+]
+
+### 2.7 获取热力图数据
+GET {{baseUrl}}/dashboard/heatmap
+
+###############################################
+# Module 3: 违章管理 API (From Postman)
+###############################################
+
+### 3.1 上报违章行为
+POST {{baseUrl}}/violations/report
+Content-Type: {{contentType}}
+
+{
+  "type": "speeding",
+  "intersectionId": "intersection-1",
+  "vehicleId": "vehicle-001",
+  "timestamp": 1702400000,
+  "speed": 85,
+  "description": "超速行驶"
+}
+
+### 3.2 查询违章列表（分页）
+GET {{baseUrl}}/violations?page=1&size=10
+
+### 3.3 查看违章详情
+GET {{baseUrl}}/violations/violation-1
+
+### 3.4 处理违章
+PUT {{baseUrl}}/violations/violation-1/process
+Content-Type: {{contentType}}
+
+{
+  "status": "processed",
+  "processorId": "admin-001",
+  "processTime": 1702400100,
+  "fine": 500,
+  "description": "已处罚"
+}
+
+### 3.5 增加违章计数（测试用）
+POST {{baseUrl}}/violations/increment
+
+### 3.6 获取违章总数（测试用）
+GET {{baseUrl}}/violations/count
+
+###############################################
+# Module 4: 智能信号灯控制
+###############################################
+
+### 8. 调整信号灯配置（路口ID=1）
+POST {{baseUrl}}/signals/1/adjust
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "mode": "INTELLIGENT",
+  "greenDuration": 45,
+  "reason": "Traffic congestion detected"
+}
+
+### 9. 查询单个路口信号灯配置
+GET {{baseUrl}}/signals/1/config
+Authorization: Bearer {{token}}
+
+### 10. 查询所有路口信号灯配置
+GET {{baseUrl}}/signals
+Authorization: Bearer {{token}}
+
+### 11. 手动模式调整信号灯
+POST {{baseUrl}}/signals/1/adjust
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "mode": "MANUAL",
+  "greenDuration": 60,
+  "redDuration": 30,
+  "yellowDuration": 3,
+  "reason": "晚高峰手动调整"
+}
+
+### 12. 固定模式调整信号灯
+POST {{baseUrl}}/signals/1/adjust
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "mode": "FIXED",
+  "greenDuration": 30,
+  "redDuration": 30,
+  "yellowDuration": 3,
+  "reason": "夜间固定模式"
+}
+
+###############################################
+# 其他可选测试
+###############################################
+
+### MinIO 健康检查
+GET http://localhost:9000/minio/health/live

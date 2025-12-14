@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # MySQL 8.0 - 核心业务数据库
+  traffic-db:
+    image: mysql:8.0
+    container_name: traffic_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      TZ: ${TIMEZONE}
+    ports:
+      - "3307:3306"
+    volumes:
+      # 数据持久化：挂载本地数据目录到容器
+      - ./mysql/data:/var/lib/mysql
+      # 初始化脚本：容器首次启动时自动执行SQL
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    networks:
+      - traffic-network
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --init-connect=SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Adminer - 轻量级数据库管理Web界面
+  db-admin:
+    image: adminer:latest
+    container_name: traffic_db_admin
+    restart: always
+    ports:
+      - "8080:8080"
+    networks:
+      - traffic-network
+    depends_on:
+      - traffic-db
+    environment:
+      ADMINER_DEFAULT_SERVER: traffic-db
+
+  # Redis - 缓存及Token存储
+  redis:
+    image: redis:7-alpine
+    container_name: traffic_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      # 数据持久化：使用AOF日志
+      - ./redis/data:/data
+    networks:
+      - traffic-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO - 对象存储服务（用于存储违章图片）
+  minio:
+    image: minio/minio:latest
+    container_name: traffic_minio
+    restart: always
+    ports:
+      - "9000:9000"  # MinIO API接口
+      - "9001:9001"  # MinIO Web管理界面（Console）
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      TZ: ${TIMEZONE}
+    volumes:
+      # 数据持久化：挂载本地数据目录
+      - ./minio/data:/minio/data
+    networks:
+      - traffic-network
+    command: server /minio/data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - redis
+
+networks:
+  traffic-network:
+    driver: bridge

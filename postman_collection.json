@@ -1,0 +1,460 @@
+{
+    "info": {
+        "name": "Traffic Management System API",
+        "description": "交通管理系统接口集合",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "1️⃣ Redis 测试 API",
+            "item": [
+                {
+                    "name": "1.1 设置路口流量状态",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/redis-test/traffic/intersection-1",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "redis-test",
+                                "traffic",
+                                "intersection-1"
+                            ]
+                        },
+                        "description": "设置某个路口的流量状态（flow=120, status=CONGESTED）"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "1.2 获取路口流量状态",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/redis-test/traffic/intersection-1",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "redis-test",
+                                "traffic",
+                                "intersection-1"
+                            ]
+                        },
+                        "description": "获取已设置的路口流量状态"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "1.3 增加违章计数",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/redis-test/violation",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "redis-test",
+                                "violation"
+                            ]
+                        },
+                        "description": "每次调用都会增加违章计数"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "1.4 获取违章总数",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/redis-test/violations",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "redis-test",
+                                "violations"
+                            ]
+                        },
+                        "description": "获取当前违章总计数"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "2️⃣ 交通监控 API",
+            "item": [
+                {
+                    "name": "2.1 获取所有路口列表",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/intersections",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "intersections"
+                            ]
+                        },
+                        "description": "获取所有已创建的路口及其基础信息"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "2.2 设置路口数据（测试用）",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"flow\": 150,\n  \"status\": \"NORMAL\",\n  \"timestamp\": 1702400000,\n  \"congestionLevel\": 2\n}"
+                        },
+                        "url": {
+                            "raw": "http://localhost:8081/api/intersections/intersection-1",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "intersections",
+                                "intersection-1"
+                            ]
+                        },
+                        "description": "为某个路口设置交通数据"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "2.3 获取路口实时数据",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/intersections/intersection-1/realtime",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "intersections",
+                                "intersection-1",
+                                "realtime"
+                            ]
+                        },
+                        "description": "获取某个路口的实时交通数据"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "2.4 设置统计数据（测试用）",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"totalViolations\": 150,\n  \"averageCongestionLevel\": 2.5,\n  \"peakHours\": \"08:00-09:00, 17:00-18:00\",\n  \"safeIntersections\": 10,\n  \"problematicIntersections\": 3\n}"
+                        },
+                        "url": {
+                            "raw": "http://localhost:8081/api/dashboard/stats",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "dashboard",
+                                "stats"
+                            ]
+                        },
+                        "description": "设置仪表板统计数据"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "2.5 获取统计数据",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/dashboard/stats",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "dashboard",
+                                "stats"
+                            ]
+                        },
+                        "description": "获取宏观交通趋势分析报告"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "2.6 设置热力图数据（测试用）",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "[\n  {\n    \"latitude\": 39.9042,\n    \"longitude\": 116.4074,\n    \"congestionLevel\": 3,\n    \"name\": \"东直门交叉口\"\n  },\n  {\n    \"latitude\": 39.9084,\n    \"longitude\": 116.4065,\n    \"congestionLevel\": 2,\n    \"name\": \"朝阳门交叉口\"\n  },\n  {\n    \"latitude\": 39.9027,\n    \"longitude\": 116.4074,\n    \"congestionLevel\": 1,\n    \"name\": \"建国门交叉口\"\n  }\n]"
+                        },
+                        "url": {
+                            "raw": "http://localhost:8081/api/dashboard/heatmap",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "dashboard",
+                                "heatmap"
+                            ]
+                        },
+                        "description": "设置车辆分布热力图数据"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "2.7 获取热力图数据",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/dashboard/heatmap",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "dashboard",
+                                "heatmap"
+                            ]
+                        },
+                        "description": "获取车辆分布热力图数据"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "3️⃣ 违章管理 API",
+            "item": [
+                {
+                    "name": "3.1 上报违章行为",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"type\": \"speeding\",\n  \"intersectionId\": \"intersection-1\",\n  \"vehicleId\": \"vehicle-001\",\n  \"timestamp\": 1702400000,\n  \"speed\": 85,\n  \"description\": \"超速行驶\"\n}"
+                        },
+                        "url": {
+                            "raw": "http://localhost:8081/api/violations/report",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "violations",
+                                "report"
+                            ]
+                        },
+                        "description": "上报新的违章行为（会触发实时警报）"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "3.2 查询违章列表（分页）",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/violations?page=1&size=10",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "violations"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "size",
+                                    "value": "10"
+                                }
+                            ]
+                        },
+                        "description": "查询违章记录列表，支持分页（默认page=1, size=10）"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "3.3 查看违章详情",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/violations/violation-1",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "violations",
+                                "violation-1"
+                            ]
+                        },
+                        "description": "查看单条违章详情（需要替换{id}为实际的违章ID）"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "3.4 处理违章",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"status\": \"processed\",\n  \"processorId\": \"admin-001\",\n  \"processTime\": 1702400100,\n  \"fine\": 500,\n  \"description\": \"已处罚\"\n}"
+                        },
+                        "url": {
+                            "raw": "http://localhost:8081/api/violations/violation-1/process",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "violations",
+                                "violation-1",
+                                "process"
+                            ]
+                        },
+                        "description": "处理违章（标记为已处理，记录处罚信息）"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "3.5 增加违章计数（测试用）",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/violations/increment",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "violations",
+                                "increment"
+                            ]
+                        },
+                        "description": "增加违章计数（每次调用+1）"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "3.6 获取违章总数（测试用）",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "http://localhost:8081/api/violations/count",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8081",
+                            "path": [
+                                "api",
+                                "violations",
+                                "count"
+                            ]
+                        },
+                        "description": "获取当前违章总计数"
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ]
+}

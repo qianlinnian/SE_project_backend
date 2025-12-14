@@ -1,0 +1,271 @@
+package com.traffic.management.service;
+
+import com.traffic.management.entity.Violation;
+import com.traffic.management.repository.ViolationRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.*;
+
+@Service
+public class ViolationService {
+
+    @Autowired
+    private ViolationRepository violationRepository;
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+
+    private static final String VIOLATION_CACHE_PREFIX = "violation:";
+    private static final String VIOLATIONS_LIST_KEY = "violations:list";
+    private static final String VIOLATION_COUNT_KEY = "violation:total:today";
+    private static final long CACHE_DURATION_MINUTES = 30;
+
+    /**
+     * 上报违章：同时写入 MySQL（持久化）和 Redis（实时查询）
+     */
+    @Transactional
+    public Violation reportViolation(Map<String, Object> violationData) {
+        // 1. 构建 Violation 对象
+        Long intersectionId;
+        Object idValue = violationData.get("intersectionId");
+        
+        // 支持数字字符串 "1" 或直接数字 1，或者 "intersection-1" 这种格式
+        if (idValue instanceof Number) {
+            intersectionId = ((Number) idValue).longValue();
+        } else {
+            String idStr = idValue.toString();
+            // 如果是 "intersection-1" 这种格式，提取数字部分
+            if (idStr.contains("-")) {
+                idStr = idStr.substring(idStr.lastIndexOf("-") + 1);
+            }
+            try {
+                intersectionId = Long.parseLong(idStr);
+            } catch (NumberFormatException e) {
+                intersectionId = 1L; // 默认值
+            }
+        }
+
+        // 2. 获取违章类型：优先使用 violationType，如果没有则使用 type
+        String violationTypeStr = violationData.containsKey("violationType") ? 
+                violationData.get("violationType").toString() : 
+                (violationData.containsKey("type") ? violationData.get("type").toString() : "RED_LIGHT");
+        
+        // 转换为枚举，支持多种格式
+        Violation.ViolationType violationType;
+        try {
+            violationType = Violation.ViolationType.valueOf(violationTypeStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            // 如果不是标准的违章类型，转换为基本类型
+            violationType = switch(violationTypeStr.toLowerCase()) {
+                case "speeding" -> Violation.ViolationType.SPEEDING;
+                case "red_light", "red light" -> Violation.ViolationType.RED_LIGHT;
+                case "illegal_lane", "illegal lane" -> Violation.ViolationType.ILLEGAL_LANE;
+                case "parking" -> Violation.ViolationType.PARKING_VIOLATION;
+                default -> Violation.ViolationType.OTHER;
+            };
+        }
+
+        // 3. 获取车牌号：优先使用 plateNumber，如果没有则使用 vehicleId
+        String plateNumber = violationData.containsKey("plateNumber") ? 
+                violationData.get("plateNumber").toString() : 
+                (violationData.containsKey("vehicleId") ? violationData.get("vehicleId").toString() : "UNKNOWN");
+
+        // 4. 获取图片URL：优先使用 imageUrl，如果没有则使用 description 或默认值
+        String imageUrl = violationData.containsKey("imageUrl") ? 
+                violationData.get("imageUrl").toString() : 
+                (violationData.containsKey("description") ? violationData.get("description").toString() : "https://example.com/default.jpg");
+
+        // 5. 获取 AI 置信度
+        Float aiConfidence = 0.95f;
+        if (violationData.containsKey("aiConfidence")) {
+            try {
+                aiConfidence = Float.parseFloat(violationData.get("aiConfidence").toString());
+            } catch (NumberFormatException e) {
+                aiConfidence = 0.95f;
+            }
+        }
+
+        Violation violation = Violation.builder()
+                .intersectionId(intersectionId)
+                .plateNumber(plateNumber)
+                .violationType(violationType)
+                .imageUrl(imageUrl)
+                .aiConfidence(aiConfidence)
+                .occurredAt(LocalDateTime.now())
+                .status(Violation.ViolationStatus.PENDING)
+                .appealStatus(Violation.AppealStatus.NO_APPEAL)
+                .build();
+
+        // 6. 写入 MySQL（持久化保存）
+        Violation savedViolation = violationRepository.save(violation);
+
+        // 7. 同时写入 Redis（用于实时查询和缓存）
+        String cacheKey = VIOLATION_CACHE_PREFIX + savedViolation.getId();
+        redisTemplate.opsForHash().putAll(cacheKey, convertToMap(savedViolation));
+        redisTemplate.expire(cacheKey, Duration.ofMinutes(CACHE_DURATION_MINUTES));
+
+        // 8. 增加违章计数（实时统计）
+        redisTemplate.opsForValue().increment(VIOLATION_COUNT_KEY);
+
+        // 9. 添加到违章列表（用于快速列表查询）
+        redisTemplate.opsForList().leftPush(VIOLATIONS_LIST_KEY, convertToMap(savedViolation));
+        redisTemplate.expire(VIOLATIONS_LIST_KEY, Duration.ofDays(7));
+
+        return savedViolation;
+    }
+
+    /**
+     * 查询违章列表：优先从 Redis 查询，如果没有则从 MySQL 查询
+     */
+    public List<Map<String, Object>> getViolations(int page, int size) {
+        // 1. 尝试从 Redis 获取（最近的数据可能还在缓存中）
+        List<Object> cachedViolations = redisTemplate.opsForList().range(VIOLATIONS_LIST_KEY, 0, size - 1);
+        if (cachedViolations != null && !cachedViolations.isEmpty()) {
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Object v : cachedViolations) {
+                if (v instanceof Map) {
+                    result.add((Map<String, Object>) v);
+                }
+            }
+            return result;
+        }
+
+        // 2. Redis 中没有，从 MySQL 查询（分页）
+        Pageable pageable = PageRequest.of(page - 1, size);
+        Page<Violation> violationPage = violationRepository.findAll(pageable);
+
+        // 3. 将查询结果写回 Redis 缓存
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Violation v : violationPage.getContent()) {
+            Map<String, Object> map = convertToMap(v);
+            result.add(map);
+            // 缓存单条记录
+            String cacheKey = VIOLATION_CACHE_PREFIX + v.getId();
+            redisTemplate.opsForHash().putAll(cacheKey, map);
+            redisTemplate.expire(cacheKey, Duration.ofMinutes(CACHE_DURATION_MINUTES));
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取单条违章详情：优先从 Redis，然后从 MySQL
+     */
+    public Map<Object, Object> getViolationDetail(String violationId) {
+        String cacheKey = VIOLATION_CACHE_PREFIX + violationId;
+
+        // 1. 先从 Redis 查询
+        Map<Object, Object> cached = redisTemplate.opsForHash().entries(cacheKey);
+        if (!cached.isEmpty()) {
+            return cached;
+        }
+
+        // 2. Redis 缓存未命中，从 MySQL 查询
+        try {
+            Long id = Long.parseLong(violationId);
+            Optional<Violation> violation = violationRepository.findById(id);
+            if (violation.isPresent()) {
+                // 3. 将查询结果写入 Redis 缓存
+                Map<String, Object> violationMap = convertToMap(violation.get());
+                redisTemplate.opsForHash().putAll(cacheKey, violationMap);
+                redisTemplate.expire(cacheKey, Duration.ofMinutes(CACHE_DURATION_MINUTES));
+                return new HashMap<>(violationMap);
+            }
+        } catch (NumberFormatException e) {
+            // ID 格式不对，返回空结果
+        }
+
+        return new HashMap<>();
+    }
+
+    /**
+     * 处理违章：更新 MySQL 记录和 Redis 缓存
+     */
+    @Transactional
+    public void processViolation(String violationId, Map<String, Object> processInfo) {
+        try {
+            Long id = Long.parseLong(violationId);
+            Optional<Violation> violationOpt = violationRepository.findById(id);
+
+            if (violationOpt.isPresent()) {
+                Violation violation = violationOpt.get();
+
+                // 1. 更新 Violation 对象
+                violation.setStatus(Violation.ViolationStatus.CONFIRMED);
+                violation.setProcessedAt(LocalDateTime.now());
+                if (processInfo.containsKey("processedBy")) {
+                    violation.setProcessedBy(Long.parseLong(processInfo.get("processedBy").toString()));
+                }
+                if (processInfo.containsKey("penaltyAmount")) {
+                    violation.setPenaltyAmount(new java.math.BigDecimal(processInfo.get("penaltyAmount").toString()));
+                }
+                if (processInfo.containsKey("reviewNotes")) {
+                    violation.setReviewNotes(processInfo.get("reviewNotes").toString());
+                }
+
+                // 2. 写入 MySQL（更新持久化数据）
+                Violation updated = violationRepository.save(violation);
+
+                // 3. 更新 Redis 缓存
+                String cacheKey = VIOLATION_CACHE_PREFIX + id;
+                redisTemplate.opsForHash().putAll(cacheKey, convertToMap(updated));
+                redisTemplate.expire(cacheKey, Duration.ofMinutes(CACHE_DURATION_MINUTES));
+            }
+        } catch (NumberFormatException e) {
+            // ID 格式不对，忽略
+        }
+    }
+
+    /**
+     * 获取违章总数：从 Redis 实时读取
+     */
+    public Long getViolationCount() {
+        Object value = redisTemplate.opsForValue().get(VIOLATION_COUNT_KEY);
+        return value != null ? Long.parseLong(value.toString()) : 0L;
+    }
+
+    /**
+     * 增加违章计数（每次调用 +1）
+     */
+    public Long incrementViolationCount() {
+        return redisTemplate.opsForValue().increment(VIOLATION_COUNT_KEY);
+    }
+
+    /**
+     * 重置违章计数（每天凌晨调用）
+     */
+    public void resetViolationCount() {
+        redisTemplate.delete(VIOLATION_COUNT_KEY);
+    }
+
+    /**
+     * 将 Violation Entity 转换为 Map（用于 Redis 存储）
+     */
+    private Map<String, Object> convertToMap(Violation violation) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", violation.getId());
+        map.put("intersectionId", violation.getIntersectionId());
+        map.put("plateNumber", violation.getPlateNumber());
+        map.put("violationType", violation.getViolationType().toString());
+        map.put("imageUrl", violation.getImageUrl());
+        map.put("aiConfidence", violation.getAiConfidence());
+        map.put("occurredAt", violation.getOccurredAt().toString());
+        map.put("status", violation.getStatus().toString());
+        map.put("processedBy", violation.getProcessedBy());
+        map.put("processedAt", violation.getProcessedAt() != null ? violation.getProcessedAt().toString() : null);
+        map.put("penaltyAmount", violation.getPenaltyAmount());
+        map.put("reviewNotes", violation.getReviewNotes());
+        map.put("appealStatus", violation.getAppealStatus().toString());
+        map.put("createdAt", violation.getCreatedAt().toString());
+        map.put("updatedAt", violation.getUpdatedAt().toString());
+        return map;
+    }
+}
