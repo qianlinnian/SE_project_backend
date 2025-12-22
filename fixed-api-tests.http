@@ -1,0 +1,48 @@
+### 修复后的API测试
+
+@baseUrl = http://localhost:8081/api
+@contentType = application/json
+
+###############################################
+# 测试修复后的API接口
+###############################################
+
+### 1. 健康检查
+GET {{baseUrl}}/health
+
+### 2. 方向特定违章检测 - 现在应该可以工作了
+POST {{baseUrl}}/violation-detection/directions/SOUTH/detect-frame
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "plateNumber": "京B77777",
+  "violationType": "违法转弯",
+  "confidence": 0.89
+}
+
+### 3. 查看多方向信号灯状态
+GET {{baseUrl}}/multi-direction-traffic/intersections/1/status
+
+### 4. 模拟设置信号灯状态 (测试用)
+POST {{baseUrl}}/multi-direction-traffic/intersections/1/simulate
+Content-Type: application/x-www-form-urlencoded
+
+direction=SOUTH&turnType=LEFT_TURN&lightPhase=RED&duration=30
+
+### 5. 获取信号灯配置详情 - 现在应该可以工作了
+GET {{baseUrl}}/multi-direction-traffic/intersections/1/directions/SOUTH/config
+
+### 6. 测试其他方向的违章检测
+POST {{baseUrl}}/violation-detection/directions/EAST/detect-frame
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "plateNumber": "沪A11111",
+  "violationType": "闯红灯",
+  "confidence": 0.95
+}
+
+### 7. 获取元数据信息
+GET {{baseUrl}}/multi-direction-traffic/metadata

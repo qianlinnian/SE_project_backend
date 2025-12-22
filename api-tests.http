@@ -253,3 +253,275 @@ Content-Type: {{contentType}}
 
 ### MinIO 健康检查
 GET http://localhost:9000/minio/health/live
+
+###############################################
+# Module 5: AI集成与视频分析 (新增功能)
+###############################################
+
+### 5.1 测试接口 - 基础健康检查
+GET {{baseUrl}}/test/health
+
+### 5.2 AI服务状态检查
+GET {{baseUrl}}/ai-integration/status
+Authorization: Bearer {{token}}
+
+### 5.3 视频上传分析 - 单个方向
+# 注意：这需要multipart/form-data格式，实际使用时需要用工具如Postman
+POST {{baseUrl}}/violation-detection/upload-video-for-analysis
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data
+
+# 参数说明:
+# - video: 视频文件
+# - intersectionId: 路口ID (如: 1)  
+# - direction: 方向 (EAST/SOUTH/WEST/NORTH)
+
+### 5.4 批量多方向视频上传
+POST {{baseUrl}}/violation-detection/upload-multi-direction-videos
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data
+
+# 参数说明:
+# - intersectionId: 路口ID
+# - eastVideo: 东向视频(可选)
+# - southVideo: 南向视频(可选) 
+# - westVideo: 西向视频(可选)
+# - northVideo: 北向视频(可选)
+
+### 5.5 AI结果回调 - 单个违章检测结果 (AI同学调用)
+POST {{baseUrl}}/violation-detection/ai-callback
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "taskId": "550e8400-e29b-41d4-a716-446655440000",
+  "plateNumber": "沪A12345",
+  "violationType": "闯红灯",
+  "confidence": 0.95,
+  "turnType": "STRAIGHT",
+  "frameTimestamp": 15.2,
+  "boundingBox": {
+    "x": 100,
+    "y": 150,
+    "width": 200,
+    "height": 120
+  },
+  "imageUrl": "http://minio:9000/violations/violation_frame_15_2.jpg"
+}
+
+### 5.6 AI结果回调 - 批量违章检测结果 (AI同学调用)
+POST {{baseUrl}}/violation-detection/ai-callback
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "taskId": "550e8400-e29b-41d4-a716-446655440001",
+  "results": [
+    {
+      "plateNumber": "京B66666",
+      "violationType": "违法转弯",
+      "confidence": 0.88,
+      "turnType": "LEFT_TURN",
+      "frameTimestamp": 25.5,
+      "boundingBox": {"x": 150, "y": 200, "width": 180, "height": 100}
+    },
+    {
+      "plateNumber": "粤C88888", 
+      "violationType": "逆行",
+      "confidence": 0.92,
+      "turnType": "STRAIGHT",
+      "frameTimestamp": 45.8,
+      "boundingBox": {"x": 300, "y": 250, "width": 220, "height": 130}
+    }
+  ]
+}
+
+### 5.7 AI分析完成通知 (AI同学调用)
+POST {{baseUrl}}/violation-detection/ai-completed  
+Content-Type: {{contentType}}
+
+{
+  "taskId": "550e8400-e29b-41d4-a716-446655440000",
+  "totalDetections": 3,
+  "processingTime": "00:02:45",
+  "status": "completed"
+}
+
+### 5.8 查询任务状态
+GET {{baseUrl}}/violation-detection/task/550e8400-e29b-41d4-a716-446655440000/status
+
+### 5.9 查询路口所有任务 (分页)
+GET {{baseUrl}}/violation-detection/intersection/1/tasks?page=0&size=10
+
+### 5.10 获取任务统计信息
+GET {{baseUrl}}/violation-detection/tasks/statistics
+
+### 5.11 原有的违章检测接口 (现在支持多方向)
+POST {{baseUrl}}/violation-detection/detect-frame
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "direction": "SOUTH",
+  "turnType": "LEFT_TURN",
+  "plateNumber": "沪A12345",
+  "violationType": "闯红灯",
+  "imageUrl": "http://minio:9000/test.jpg", 
+  "confidence": 0.95
+}
+
+### 5.12 方向特定违章检测
+POST {{baseUrl}}/violation-detection/directions/SOUTH/detect-frame
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "plateNumber": "京B77777",
+  "violationType": "违法转弯",
+  "confidence": 0.89
+}
+
+###############################################
+# Module 6: 多方向信号灯控制 (增强功能)
+###############################################
+
+### 6.1 查看多方向信号灯状态
+GET {{baseUrl}}/multi-direction-traffic/intersections/1/status
+
+### 6.2 查看特定方向转向的信号灯状态
+GET {{baseUrl}}/multi-direction-traffic/intersections/1/directions/SOUTH/turns/LEFT_TURN/status
+
+### 6.3 模拟设置信号灯状态 (测试用)
+POST {{baseUrl}}/multi-direction-traffic/intersections/1/simulate
+Content-Type: {{contentType}}
+
+{
+  "direction": "SOUTH",
+  "turnType": "LEFT_TURN", 
+  "lightPhase": "RED",
+  "duration": 30
+}
+
+### 6.4 获取信号灯配置详情
+GET {{baseUrl}}/multi-direction-traffic/intersections/1/directions/SOUTH/config
+
+###############################################
+# Module 7: AI集成和视频分析 (新增功能)
+###############################################
+
+### 7.1 测试基础健康检查
+GET {{baseUrl}}/test/health
+Authorization: Bearer {{token}}
+
+### 7.2 AI服务状态检查
+GET {{baseUrl}}/ai-integration/status
+Authorization: Bearer {{token}}
+
+### 7.2.1 AI服务健康检查
+GET {{baseUrl}}/ai-integration/health
+Authorization: Bearer {{token}}
+
+### 7.3 单个方向视频上传分析
+POST {{baseUrl}}/violation-detection/upload-video-for-analysis
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+
+------WebKitFormBoundary
+Content-Disposition: form-data; name="video"; filename="test_video.mp4"
+Content-Type: video/mp4
+
+< ./test_video.txt
+------WebKitFormBoundary
+Content-Disposition: form-data; name="intersectionId"
+
+1
+------WebKitFormBoundary
+Content-Disposition: form-data; name="direction"
+
+SOUTH
+------WebKitFormBoundary--
+
+### 7.4 AI检测结果回调 (AI模型调用)
+POST {{baseUrl}}/violation-detection/ai-callback
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "taskId": "550e8400-e29b-41d4-a716-446655440000",
+  "plateNumber": "沪A12345",
+  "violationType": "闯红灯",
+  "confidence": 0.95,
+  "turnType": "STRAIGHT",
+  "frameTimestamp": 15.2,
+  "boundingBox": {
+    "x": 100,
+    "y": 150,
+    "width": 200,
+    "height": 120
+  },
+  "imageUrl": "http://localhost:9000/violations/violation_frame.jpg"
+}
+
+### 7.5 AI分析完成通知
+POST {{baseUrl}}/violation-detection/ai-completed
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "taskId": "550e8400-e29b-41d4-a716-446655440000",
+  "totalDetections": 3,
+  "processingTime": "00:02:45",
+  "status": "completed"
+}
+
+### 7.6 查询任务状态
+GET {{baseUrl}}/violation-detection/task/550e8400-e29b-41d4-a716-446655440000/status
+Authorization: Bearer {{token}}
+
+### 7.7 查询路口任务列表
+GET {{baseUrl}}/violation-detection/intersection/1/tasks?page=0&size=10
+Authorization: Bearer {{token}}
+
+### 7.8 获取任务统计信息
+GET {{baseUrl}}/violation-detection/tasks/statistics
+Authorization: Bearer {{token}}
+
+### 7.9 批量AI结果回调
+POST {{baseUrl}}/violation-detection/ai-callback
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "taskId": "550e8400-e29b-41d4-a716-446655440001",
+  "results": [
+    {
+      "plateNumber": "京B66666",
+      "violationType": "违法转弯",
+      "confidence": 0.88,
+      "turnType": "LEFT_TURN",
+      "frameTimestamp": 25.5
+    },
+    {
+      "plateNumber": "粤C88888",
+      "violationType": "逆行",
+      "confidence": 0.92,
+      "turnType": "STRAIGHT", 
+      "frameTimestamp": 45.8
+    }
+  ]
+}
+
+### 7.10 基础违章检测接口 (兼容原有)
+POST {{baseUrl}}/violation-detection/detect-frame
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "direction": "SOUTH",
+  "turnType": "STRAIGHT",
+  "plateNumber": "测试A123",
+  "violationType": "闯红灯",
+  "imageUrl": "http://test.jpg",
+  "confidence": 0.95
+}

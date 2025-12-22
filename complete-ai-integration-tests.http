@@ -1,0 +1,318 @@
+### 🚀 完整的多方向视频分析AI集成测试用例
+### 解决四步对接中的所有问题：视频上传 → AI分析 → 结果回调 → 违章验证
+
+### ===== 1. 步骤1：用户 → 您的后端（视频上传） =====
+
+### 1.1 单个方向视频上传分析（新版推荐接口）
+POST http://localhost:8088/api/violation-detection/upload-video-for-analysis
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="video"; filename="south_red_light_violation.mp4"
+Content-Type: video/mp4
+
+< ./test_videos/south_red_light_violation.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="intersectionId"
+
+1
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="direction"
+
+SOUTH
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### 1.2 批量多方向视频上传
+POST http://localhost:8088/api/violation-detection/upload-multi-direction-videos
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="intersectionId"
+
+1
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="eastVideo"; filename="east_illegal_turn.mp4"
+Content-Type: video/mp4
+
+< ./test_videos/east_illegal_turn.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="southVideo"; filename="south_wrong_way.mp4"
+Content-Type: video/mp4
+
+< ./test_videos/south_wrong_way.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="westVideo"; filename="west_cross_line.mp4"
+Content-Type: video/mp4
+
+< ./test_videos/west_cross_line.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### ===== 2. 步骤2：AI模型接收（AI同学需要实现的接口） =====
+
+### 2.1 AI模型接收分析请求的示例格式
+# AI同学需要实现此接口接收您的分析请求
+# POST http://localhost:5000/analyze-video
+# {
+#   "taskId": "550e8400-e29b-41d4-a716-446655440000",
+#   "videoUrl": "http://localhost:8088/api/files/video/intersection_1/video_20241219_143022.mp4",
+#   "intersectionId": 1,
+#   "direction": "SOUTH",
+#   "callbackUrl": "http://localhost:8088/api/violation-detection/ai-callback",
+#   "requestTime": "2024-12-19T14:30:22"
+# }
+
+### ===== 3. 步骤3：AI → 您的后端（结果回调） =====
+
+### 3.1 AI单个违章结果回调（AI同学调用您的接口）
+POST http://localhost:8088/api/violation-detection/ai-callback
+Content-Type: application/json
+
+{
+  "taskId": "550e8400-e29b-41d4-a716-446655440000",
+  "plateNumber": "沪A12345",
+  "violationType": "闯红灯",
+  "confidence": 0.95,
+  "turnType": "STRAIGHT",
+  "frameTimestamp": 15.2,
+  "boundingBox": {
+    "x": 100,
+    "y": 150,
+    "width": 200,
+    "height": 120
+  },
+  "imageUrl": "http://minio:9000/violations/violation_frame_15_2.jpg"
+}
+
+### 3.2 AI批量违章结果回调
+POST http://localhost:8088/api/violation-detection/ai-callback
+Content-Type: application/json
+
+{
+  "taskId": "550e8400-e29b-41d4-a716-446655440001",
+  "results": [
+    {
+      "plateNumber": "京B66666",
+      "violationType": "违法转弯",
+      "confidence": 0.88,
+      "turnType": "LEFT_TURN",
+      "frameTimestamp": 25.5,
+      "boundingBox": {"x": 150, "y": 200, "width": 180, "height": 100}
+    },
+    {
+      "plateNumber": "粤C88888", 
+      "violationType": "逆行",
+      "confidence": 0.92,
+      "turnType": "STRAIGHT",
+      "frameTimestamp": 45.8,
+      "boundingBox": {"x": 300, "y": 250, "width": 220, "height": 130}
+    }
+  ]
+}
+
+### 3.3 AI分析完成通知
+POST http://localhost:8088/api/violation-detection/ai-completed
+Content-Type: application/json
+
+{
+  "taskId": "550e8400-e29b-41d4-a716-446655440000",
+  "totalDetections": 3,
+  "processingTime": "00:02:45",
+  "status": "completed"
+}
+
+### ===== 4. 步骤4：任务状态查询和管理 =====
+
+### 4.1 查询任务状态和进度
+GET http://localhost:8088/api/violation-detection/task/550e8400-e29b-41d4-a716-446655440000/status
+
+### 4.2 查询路口所有任务
+GET http://localhost:8088/api/violation-detection/intersection/1/tasks?page=0&size=10
+
+### 4.3 获取任务统计信息
+GET http://localhost:8088/api/violation-detection/tasks/statistics
+
+### 4.4 获取AI服务状态
+GET http://localhost:8088/api/ai-integration/status
+
+### ===== 5. 多方向信号灯状态验证 =====
+
+### 5.1 验证南向左转信号灯状态
+GET http://localhost:8088/api/multi-direction-traffic/intersections/1/directions/SOUTH/turns/LEFT_TURN/status
+
+### 5.2 查看所有方向当前状态  
+GET http://localhost:8088/api/multi-direction-traffic/intersections/1/status
+
+### 5.3 模拟设置信号灯状态（测试用）
+POST http://localhost:8088/api/multi-direction-traffic/intersections/1/simulate
+Content-Type: application/json
+
+{
+  "direction": "SOUTH",
+  "turnType": "LEFT_TURN", 
+  "lightPhase": "RED",
+  "duration": 30
+}
+
+### ===== 6. WebSocket实时通知测试 =====
+
+### 6.1 WebSocket连接地址
+# ws://localhost:8088/ws-notifications
+
+### 6.2 订阅特定任务通知
+# /topic/task/550e8400-e29b-41d4-a716-446655440000
+
+### 6.3 订阅所有任务通知
+# /topic/tasks
+
+### 6.4 订阅系统通知
+# /topic/system
+
+### ===== 7. 兼容性测试（原有接口） =====
+
+### 7.1 原有的帧检测接口（现在支持方向参数）
+POST http://localhost:8088/api/violation-detection/detect-frame
+Content-Type: application/json
+
+{
+  "intersectionId": 1,
+  "direction": "SOUTH",
+  "turnType": "LEFT_TURN",
+  "plateNumber": "沪A12345",
+  "violationType": "闯红灯",
+  "imageUrl": "http://minio:9000/test.jpg", 
+  "confidence": 0.95
+}
+
+### 7.2 方向特定检测接口
+POST http://localhost:8088/api/violation-detection/directions/SOUTH/detect-frame
+Content-Type: application/json
+
+{
+  "intersectionId": 1,
+  "plateNumber": "京B77777",
+  "violationType": "违法转弯",
+  "confidence": 0.89
+}
+
+### ===== 8. 系统管理和监控 =====
+
+### 8.1 获取WebSocket通知服务状态
+GET http://localhost:8088/api/system/notification-service/status
+
+### 8.2 获取任务调度服务状态
+GET http://localhost:8088/api/system/schedule-service/status
+
+### 8.3 手动触发超时任务处理（管理员功能）
+POST http://localhost:8088/api/system/schedule-service/handle-timeout-tasks
+
+### 8.4 手动触发失败任务重试（管理员功能）
+POST http://localhost:8088/api/system/schedule-service/retry-failed-tasks
+
+### ===== 9. 错误处理测试 =====
+
+### 9.1 测试无效方向参数
+POST http://localhost:8088/api/violation-detection/upload-video-for-analysis
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="video"; filename="test.mp4"
+Content-Type: video/mp4
+
+< ./test.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="intersectionId"
+
+1
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="direction"
+
+INVALID_DIRECTION
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### 9.2 测试AI回调错误任务ID
+POST http://localhost:8088/api/violation-detection/ai-callback
+Content-Type: application/json
+
+{
+  "taskId": "non-existent-task-id",
+  "plateNumber": "测试A123",
+  "violationType": "闯红灯",
+  "confidence": 0.95
+}
+
+### ===== 10. 性能和压力测试 =====
+
+### 10.1 批量创建任务（压力测试）
+POST http://localhost:8088/api/violation-detection/upload-multi-direction-videos
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="intersectionId"
+
+2
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="eastVideo"; filename="pressure_test_1.mp4"
+Content-Type: video/mp4
+
+< ./pressure_test_1.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="southVideo"; filename="pressure_test_2.mp4"  
+Content-Type: video/mp4
+
+< ./pressure_test_2.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="westVideo"; filename="pressure_test_3.mp4"
+Content-Type: video/mp4
+
+< ./pressure_test_3.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="northVideo"; filename="pressure_test_4.mp4"
+Content-Type: video/mp4
+
+< ./pressure_test_4.mp4
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### ===== 使用说明 =====
+#
+# 🎯 完整的四步对接流程已实现：
+#
+# 步骤1：用户上传视频 → 您的后端
+# - 支持单个方向和批量多方向上传
+# - 自动生成任务ID和创建任务记录
+# - 支持文件验证和方向参数验证
+# - 立即返回任务信息给用户
+#
+# 步骤2：您的后端 → AI模型
+# - 异步调用AI模型分析接口
+# - 支持重试和超时处理
+# - 自动构建标准化的AI请求格式
+# - 提供回调URL给AI模型
+#
+# 步骤3：AI模型 → 您的后端  
+# - 接收AI单个或批量检测结果
+# - 自动关联任务ID和方向信息
+# - 支持去重和数据验证
+# - 保存AI原始结果用于审计
+#
+# 步骤4：您的后端处理
+# - 结合多方向信号灯状态验证违章
+# - 自动过滤不构成违章的检测结果
+# - 实时更新任务状态和进度
+# - WebSocket推送通知给前端
+#
+# 🚀 解决的关键问题：
+# ✅ 任务生命周期管理：从上传到完成的全程跟踪
+# ✅ AI集成和重试：稳定的AI模型调用和错误处理
+# ✅ 异步处理：用户上传后立即响应，后台异步处理
+# ✅ 实时通知：WebSocket推送任务状态给前端
+# ✅ 多方向支持：支持四个方向独立的视频分析
+# ✅ 信号灯集成：精确验证违章是否成立
+# ✅ 错误处理：完整的超时、重试、异常处理机制
+# ✅ 数据完整性：任务与结果的完整关联追踪
+#
+# 🎮 您同学只需要实现：
+# 1. 接收您的分析请求（POST /analyze-video）
+# 2. 将结果发送到您的回调地址（POST /api/violation-detection/ai-callback）
+# 3. 分析完成时通知您（POST /api/violation-detection/ai-completed）
+#
+# 其他所有问题都已在您的后端系统中解决！

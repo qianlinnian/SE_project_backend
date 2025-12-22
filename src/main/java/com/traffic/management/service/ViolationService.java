@@ -36,7 +36,7 @@ public class ViolationService {
         // 1. 构建 Violation 对象
         Long intersectionId;
         Object idValue = violationData.get("intersectionId");
-        
+
         // 支持数字字符串 "1" 或直接数字 1，或者 "intersection-1" 这种格式
         if (idValue instanceof Number) {
             intersectionId = ((Number) idValue).longValue();
@@ -54,34 +54,35 @@ public class ViolationService {
         }
 
         // 2. 获取违章类型：优先使用 violationType，如果没有则使用 type
-        String violationTypeStr = violationData.containsKey("violationType") ? 
-                violationData.get("violationType").toString() : 
-                (violationData.containsKey("type") ? violationData.get("type").toString() : "RED_LIGHT");
-        
+        String violationTypeStr = violationData.containsKey("violationType")
+                ? violationData.get("violationType").toString()
+                : (violationData.containsKey("type") ? violationData.get("type").toString() : "RED_LIGHT");
+
         // 转换为枚举，支持多种格式
         Violation.ViolationType violationType;
         try {
             violationType = Violation.ViolationType.valueOf(violationTypeStr.toUpperCase());
         } catch (IllegalArgumentException e) {
             // 如果不是标准的违章类型，转换为基本类型
-            violationType = switch(violationTypeStr.toLowerCase()) {
-                case "speeding" -> Violation.ViolationType.SPEEDING;
-                case "red_light", "red light" -> Violation.ViolationType.RED_LIGHT;
-                case "illegal_lane", "illegal lane" -> Violation.ViolationType.ILLEGAL_LANE;
-                case "parking" -> Violation.ViolationType.PARKING_VIOLATION;
+            violationType = switch (violationTypeStr.toLowerCase()) {
+                case "speeding", "超速" -> Violation.ViolationType.SPEEDING;
+                case "red_light", "red light", "闯红灯" -> Violation.ViolationType.RED_LIGHT;
+                case "wrong_way", "逆行", "wrong direction" -> Violation.ViolationType.WRONG_WAY;
+                case "cross_solid_line", "跨实线", "压实线" -> Violation.ViolationType.CROSS_SOLID_LINE;
+                case "illegal_turn", "违法转弯", "违章转弯" -> Violation.ViolationType.ILLEGAL_TURN;
+                case "parking", "违章停车" -> Violation.ViolationType.PARKING_VIOLATION;
                 default -> Violation.ViolationType.OTHER;
             };
         }
 
         // 3. 获取车牌号：优先使用 plateNumber，如果没有则使用 vehicleId
-        String plateNumber = violationData.containsKey("plateNumber") ? 
-                violationData.get("plateNumber").toString() : 
-                (violationData.containsKey("vehicleId") ? violationData.get("vehicleId").toString() : "UNKNOWN");
+        String plateNumber = violationData.containsKey("plateNumber") ? violationData.get("plateNumber").toString()
+                : (violationData.containsKey("vehicleId") ? violationData.get("vehicleId").toString() : "UNKNOWN");
 
         // 4. 获取图片URL：优先使用 imageUrl，如果没有则使用 description 或默认值
-        String imageUrl = violationData.containsKey("imageUrl") ? 
-                violationData.get("imageUrl").toString() : 
-                (violationData.containsKey("description") ? violationData.get("description").toString() : "https://example.com/default.jpg");
+        String imageUrl = violationData.containsKey("imageUrl") ? violationData.get("imageUrl").toString()
+                : (violationData.containsKey("description") ? violationData.get("description").toString()
+                        : "https://example.com/default.jpg");
 
         // 5. 获取 AI 置信度
         Float aiConfidence = 0.95f;

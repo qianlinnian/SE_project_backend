@@ -24,6 +24,16 @@ public class SignalConfigResponse {
     private Integer greenDuration;
     private Integer redDuration;
     private Integer yellowDuration;
+
+    // 直行信号灯独立配置
+    private Integer straightRedDuration;
+    private Integer straightYellowDuration;
+    private Integer straightGreenDuration;
+
+    // 转弯信号灯独立配置
+    private Integer turnRedDuration;
+    private Integer turnYellowDuration;
+    private Integer turnGreenDuration;
     private Integer phaseRemaining;
     private Integer cycleTime;
 

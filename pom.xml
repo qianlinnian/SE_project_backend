@@ -113,6 +113,19 @@
             <version>5.8.23</version>
         </dependency>
 
+        <!-- FFmpeg Java - 视频处理 -->
+        <dependency>
+            <groupId>net.bramp.ffmpeg</groupId>
+            <artifactId>ffmpeg</artifactId>
+            <version>0.7.0</version>
+        </dependency>
+
+        <!-- 异步处理支持 - 使用内置的异步功能 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
