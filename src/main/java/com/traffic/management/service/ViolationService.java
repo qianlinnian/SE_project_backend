@@ -94,8 +94,30 @@ public class ViolationService {
             }
         }
 
+        // 6. 获取方向信息
+        Violation.Direction direction = null;
+        if (violationData.containsKey("direction")) {
+            try {
+                direction = Violation.Direction.valueOf(violationData.get("direction").toString().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                // 忽略无效的方向值
+            }
+        }
+
+        // 7. 获取转弯类型
+        Violation.TurnType turnType = null;
+        if (violationData.containsKey("turnType")) {
+            try {
+                turnType = Violation.TurnType.valueOf(violationData.get("turnType").toString().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                // 忽略无效的转弯类型
+            }
+        }
+
         Violation violation = Violation.builder()
                 .intersectionId(intersectionId)
+                .direction(direction)
+                .turnType(turnType)
                 .plateNumber(plateNumber)
                 .violationType(violationType)
                 .imageUrl(imageUrl)

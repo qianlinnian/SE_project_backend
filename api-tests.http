@@ -10,8 +10,11 @@
 # 0. 健康检查
 ###############################################
 
-### 健康检查
+### 0.1 健康检查
 GET {{baseUrl}}/health
+
+### 0.2 根路径欢迎信息
+GET {{baseUrl}}/
 
 ###############################################
 # Module 1: 用户与权限管理
@@ -161,7 +164,7 @@ GET {{baseUrl}}/dashboard/heatmap
 # Module 3: 违章管理 API (From Postman)
 ###############################################
 
-### 3.1 上报违章行为
+### 3.1 上报违章行为 (旧格式兼容)
 POST {{baseUrl}}/violations/report
 Content-Type: {{contentType}}
 
@@ -172,6 +175,76 @@ Content-Type: {{contentType}}
   "timestamp": 1702400000,
   "speed": 85,
   "description": "超速行驶"
+}
+
+### 3.1.1 上报违章行为 (新格式 - 包含方向信息，供AI调用)
+POST {{baseUrl}}/violations/report
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "direction": "SOUTH",
+  "turnType": "STRAIGHT",
+  "plateNumber": "京A12345",
+  "violationType": "RED_LIGHT",
+  "imageUrl": "https://minio.example.com/violations/frame_001.jpg",
+  "aiConfidence": 0.95
+}
+
+### 3.1.2 上报闯红灯违章 (AI调用示例)
+POST {{baseUrl}}/violations/report
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "direction": "EAST",
+  "turnType": "LEFT_TURN",
+  "plateNumber": "沪B66666",
+  "violationType": "RED_LIGHT",
+  "imageUrl": "https://minio.example.com/violations/red_light_001.jpg",
+  "aiConfidence": 0.92
+}
+
+### 3.1.3 上报逆行违章 (AI调用示例)
+POST {{baseUrl}}/violations/report
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 2,
+  "direction": "NORTH",
+  "turnType": "STRAIGHT",
+  "plateNumber": "粤C88888",
+  "violationType": "WRONG_WAY",
+  "imageUrl": "https://minio.example.com/violations/wrong_way_001.jpg",
+  "aiConfidence": 0.88
+}
+
+### 3.1.4 上报压实线违章 (AI调用示例)
+POST {{baseUrl}}/violations/report
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "direction": "WEST",
+  "turnType": "RIGHT_TURN",
+  "plateNumber": "苏D99999",
+  "violationType": "CROSS_SOLID_LINE",
+  "imageUrl": "https://minio.example.com/violations/cross_line_001.jpg",
+  "aiConfidence": 0.90
+}
+
+### 3.1.5 上报违法转弯违章 (AI调用示例)
+POST {{baseUrl}}/violations/report
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "direction": "SOUTH",
+  "turnType": "LEFT_TURN",
+  "plateNumber": "浙E11111",
+  "violationType": "ILLEGAL_TURN",
+  "imageUrl": "https://minio.example.com/violations/illegal_turn_001.jpg",
+  "aiConfidence": 0.85
 }
 
 ### 3.2 查询违章列表（分页）
@@ -370,7 +443,7 @@ Content-Type: {{contentType}}
   "confidence": 0.95
 }
 
-### 5.12 方向特定违章检测
+### 5.12 方向特定违章检测 - 南向
 POST {{baseUrl}}/violation-detection/directions/SOUTH/detect-frame
 Content-Type: {{contentType}}
 
@@ -379,6 +452,45 @@ Content-Type: {{contentType}}
   "plateNumber": "京B77777",
   "violationType": "违法转弯",
   "confidence": 0.89
+}
+
+### 5.13 方向特定违章检测 - 东向闯红灯
+POST {{baseUrl}}/violation-detection/directions/EAST/detect-frame
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "plateNumber": "沪C88888",
+  "violationType": "闯红灯",
+  "turnType": "STRAIGHT",
+  "imageUrl": "http://minio:9000/violations/east_redlight.jpg",
+  "confidence": 0.93
+}
+
+### 5.14 方向特定违章检测 - 西向逆行
+POST {{baseUrl}}/violation-detection/directions/WEST/detect-frame
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 1,
+  "plateNumber": "粤D99999",
+  "violationType": "逆行",
+  "turnType": "STRAIGHT",
+  "imageUrl": "http://minio:9000/violations/west_wrongway.jpg",
+  "confidence": 0.96
+}
+
+### 5.15 方向特定违章检测 - 北向压实线
+POST {{baseUrl}}/violation-detection/directions/NORTH/detect-frame
+Content-Type: {{contentType}}
+
+{
+  "intersectionId": 2,
+  "plateNumber": "苏E11111",
+  "violationType": "压实线",
+  "turnType": "LEFT_TURN",
+  "imageUrl": "http://minio:9000/violations/north_crossline.jpg",
+  "confidence": 0.87
 }
 
 ###############################################
@@ -404,6 +516,55 @@ Content-Type: {{contentType}}
 
 ### 6.4 获取信号灯配置详情
 GET {{baseUrl}}/multi-direction-traffic/intersections/1/directions/SOUTH/config
+
+### 6.5 获取路口所有方向配置
+GET {{baseUrl}}/multi-direction-traffic/intersections/1/directions
+
+### 6.6 验证违章是否成立 (结合信号灯状态)
+POST {{baseUrl}}/multi-direction-traffic/intersections/1/validate-violation
+Content-Type: {{contentType}}
+
+{
+  "direction": "SOUTH",
+  "turnType": "STRAIGHT",
+  "violationType": "RED_LIGHT"
+}
+
+### 6.7 验证违法转弯
+POST {{baseUrl}}/multi-direction-traffic/intersections/1/validate-violation
+Content-Type: {{contentType}}
+
+{
+  "direction": "EAST",
+  "turnType": "LEFT_TURN",
+  "violationType": "ILLEGAL_TURN"
+}
+
+### 6.8 验证逆行 (始终构成违章)
+POST {{baseUrl}}/multi-direction-traffic/intersections/1/validate-violation
+Content-Type: {{contentType}}
+
+{
+  "direction": "NORTH",
+  "turnType": "STRAIGHT",
+  "violationType": "WRONG_WAY"
+}
+
+### 6.9 验证压实线 (始终构成违章)
+POST {{baseUrl}}/multi-direction-traffic/intersections/1/validate-violation
+Content-Type: {{contentType}}
+
+{
+  "direction": "WEST",
+  "turnType": "RIGHT_TURN",
+  "violationType": "CROSS_SOLID_LINE"
+}
+
+### 6.10 清除路口缓存
+DELETE {{baseUrl}}/multi-direction-traffic/intersections/1/cache
+
+### 6.11 获取支持的方向和类型元数据
+GET {{baseUrl}}/multi-direction-traffic/metadata
 
 ###############################################
 # Module 7: AI集成和视频分析 (新增功能)
