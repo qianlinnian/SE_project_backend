@@ -23,6 +23,14 @@ public class Violation {
     @Column(name = "intersection_id", nullable = false)
     private Long intersectionId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "direction")
+    private Direction direction;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "turn_type")
+    private TurnType turnType;
+
     @Column(name = "plate_number", nullable = false, length = 20)
     private String plateNumber;
 
@@ -83,7 +91,13 @@ public class Violation {
     }
 
     public enum ViolationType {
-        RED_LIGHT, WRONG_WAY, ILLEGAL_LANE, SPEEDING, PARKING_VIOLATION, OTHER
+        RED_LIGHT, // 闯红灯
+        WRONG_WAY, // 逆行
+        CROSS_SOLID_LINE, // 跨实线
+        ILLEGAL_TURN, // 违法转弯
+        SPEEDING, // 超速
+        PARKING_VIOLATION, // 违章停车
+        OTHER // 其他
     }
 
     public enum ViolationStatus {
@@ -92,5 +106,45 @@ public class Violation {
 
     public enum AppealStatus {
         NO_APPEAL, APPEALING, APPEALED
+    }
+
+    /**
+     * 方向枚举
+     */
+    public enum Direction {
+        EAST("东"),
+        SOUTH("南"),
+        WEST("西"),
+        NORTH("北");
+
+        private final String chineseName;
+
+        Direction(String chineseName) {
+            this.chineseName = chineseName;
+        }
+
+        public String getChineseName() {
+            return chineseName;
+        }
+    }
+
+    /**
+     * 转弯类型枚举
+     */
+    public enum TurnType {
+        STRAIGHT("直行"),
+        LEFT_TURN("左转"),
+        RIGHT_TURN("右转"),
+        U_TURN("掉头");
+
+        private final String chineseName;
+
+        TurnType(String chineseName) {
+            this.chineseName = chineseName;
+        }
+
+        public String getChineseName() {
+            return chineseName;
+        }
     }
 }

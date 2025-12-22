@@ -36,7 +36,7 @@ public class JwtTokenProvider {
         claims.put("userId", user.getId());
         claims.put("username", user.getUsername());
         claims.put("role", user.getRole().name());
-        
+
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
 
@@ -78,7 +78,20 @@ public class JwtTokenProvider {
      */
     public boolean validateToken(String token) {
         try {
+            // 添加调试信息
+            log.debug("验证Token: {}", token);
+            log.debug("Token长度: {}", token.length());
+
+            // 检查Token基本格式
+            String[] parts = token.split("\\.");
+            log.debug("Token部分数量: {}", parts.length);
+            if (parts.length != 3) {
+                log.error("Token格式错误: 期望3个部分，实际 {} 个部分", parts.length);
+                return false;
+            }
+
             parseToken(token);
+            log.debug("Token验证成功");
             return true;
         } catch (JwtException | IllegalArgumentException e) {
             log.error("JWT验证失败: {}", e.getMessage());

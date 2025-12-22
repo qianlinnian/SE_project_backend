@@ -1,0 +1,81 @@
+sequenceDiagram
+  %% Traffic Monitor Module - Sequence Diagram
+  %% Standard UML sequence diagram for Traffic Monitor realtime data flow
+
+  participant Camera as Camera/AI Device
+  participant Ingest as Ingestion Gateway
+  participant API as TrafficMonitorController
+  participant Redis as RedisService
+  participant Stream as RTSP/HLS Server
+  participant Front as Frontend (Admin/Police)
+
+  autonumber
+
+  Camera->>Ingest: send image + metrics\n(vehicleCount, signalStatus, avgSpeed)
+  activate Ingest
+  Ingest->>API: POST /api/intersections/{id}\n{vehicleCount, signalStatus, avgSpeed, ...}
+  activate API
+  API->>Redis: setTrafficStatus(intersectionId, data)
+  activate Redis
+  Redis-->>API: OK (TTL: 5 min)
+  deactivate Redis
+  API->>Stream: (optional) request stream URL for cameraId
+  activate Stream
+  Stream-->>API: rtsp://camera/stream or hls://...
+  deactivate Stream
+  API-->>Ingest: 200 OK {message: "Intersection data set"}
+  deactivate API
+  deactivate Ingest
+
+  rect rgb(200, 220, 255)
+  Note right of Front: Admin/Police queries all intersections
+  Front->>API: GET /api/intersections
+  activate API
+  API->>Redis: getAllIntersections()
+  activate Redis
+  Redis-->>API: [intersection:1, intersection:2, ...]
+  loop for each key
+    API->>Redis: getTrafficStatus(id)
+    Redis-->>API: {vehicleCount, signalStatus, avgSpeed, ...}
+  end
+  deactivate Redis
+  API-->>Front: 200 JSON\n[{id, data: {vehicleCount, signalStatus, ...}}, ...]
+  deactivate API
+  end
+
+  rect rgb(200, 220, 255)
+  Note right of Front: Get realtime data for single intersection
+  Front->>API: GET /api/intersections/{id}/realtime
+  activate API
+  API->>Redis: getTrafficStatus(id)
+  activate Redis
+  Redis-->>API: {vehicleCount, signalStatus, avgSpeed, cameraStreamUrl, ...}
+  deactivate Redis
+  API-->>Front: 200 JSON {vehicleCount, signalStatus, avgSpeed, cameraStreamUrl}
+  deactivate API
+  Note right of Front: If cameraStreamUrl present,\nfrontend plays RTSP/HLS directly
+  end
+
+  rect rgb(220, 220, 200)
+  Note right of Front: Admin queries dashboard analytics
+  Front->>API: GET /api/dashboard/stats
+  activate API
+  API->>Redis: getDashboardStats()
+  activate Redis
+  Redis-->>API: {congestionIndex, totalVehicleCount, avgTravelTime, updatedAt}
+  deactivate Redis
+  API-->>Front: 200 JSON {congestionIndex, totalVehicleCount, avgTravelTime}
+  deactivate API
+  end
+
+  rect rgb(220, 220, 200)
+  Note right of Front: Get heatmap data for big-screen
+  Front->>API: GET /api/dashboard/heatmap
+  activate API
+  API->>Redis: getHeatmapData()
+  activate Redis
+  Redis-->>API: [{lat, lng, weight}, {lat, lng, weight}, ...]
+  deactivate Redis
+  API-->>Front: 200 JSON [{lat, lng, weight}, ...]
+  deactivate API
+  end
