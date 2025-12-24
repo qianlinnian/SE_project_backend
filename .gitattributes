@@ -1,0 +1,5 @@
+# .gitattributes - 让 Git 自动处理换行符
+*.py text=auto
+*.sh text=auto
+*.java text=auto
+*.md text=auto
