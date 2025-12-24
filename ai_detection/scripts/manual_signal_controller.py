@@ -40,7 +40,7 @@ class ManualSignalController:
         self.timeline = None
         if config_path and Path(config_path).exists():
             self.load_timeline(config_path)
-            print(f"✅ 加载信号灯时间轴配置: {config_path}")
+            print(f"加载信号灯时间轴配置: {config_path}")
         else:
             print(f"🎮 手动控制模式（使用键盘控制）")
 
@@ -105,13 +105,13 @@ class ManualSignalController:
         """所有方向设为红灯"""
         for direction in self.current_states:
             self.current_states[direction] = 'red'
-        print("🚦 所有方向 -> 🔴 红灯")
+        print("所有方向 -> 🔴 红灯")
 
     def set_all_green(self):
         """所有方向设为绿灯"""
         for direction in self.current_states:
             self.current_states[direction] = 'green'
-        print("🚦 所有方向 -> 🟢 绿灯")
+        print("所有方向 -> 🟢 绿灯")
 
     def set_north_south_green(self):
         """南北方向绿灯，东西方向红灯"""
@@ -119,7 +119,7 @@ class ManualSignalController:
         self.current_states['south_bound'] = 'green'
         self.current_states['west_bound'] = 'red'
         self.current_states['east_bound'] = 'red'
-        print("🚦 南北 -> 🟢 绿灯 | 东西 -> 🔴 红灯")
+        print("南北 -> 🟢 绿灯 | 东西 -> 🔴 红灯")
 
     def set_west_east_green(self):
         """东西方向绿灯，南北方向红灯"""
@@ -127,19 +127,19 @@ class ManualSignalController:
         self.current_states['south_bound'] = 'red'
         self.current_states['west_bound'] = 'green'
         self.current_states['east_bound'] = 'green'
-        print("🚦 南北 -> 🔴 红灯 | 东西 -> 🟢 绿灯")
+        print("南北 -> 🔴 红灯 | 东西 -> 🟢 绿灯")
     
     def set_all_left_turn_red(self):
         """所有方向左转灯设为红灯"""
         for direction in self.left_turn_signals:
             self.left_turn_signals[direction] = 'red'
-        print("🚦 所有方向左转灯 -> 🔴 红灯")
+        print("所有方向左转灯 -> 🔴 红灯")
     
     def set_all_left_turn_green(self):
         """所有方向左转灯设为绿灯"""
         for direction in self.left_turn_signals:
             self.left_turn_signals[direction] = 'green'
-        print("🚦 所有方向左转灯 -> 🟢 绿灯")
+        print("所有方向左转灯 -> 🟢 绿灯")
     
     def toggle_left_turn(self, direction: str):
         """切换指定方向的左转灯（红<->绿）"""
@@ -148,7 +148,7 @@ class ManualSignalController:
             new_state = 'green' if current == 'red' else 'red'
             self.left_turn_signals[direction] = new_state
             emoji = "🟢" if new_state == 'green' else "🔴"
-            print(f"🚦 {direction} 左转灯 -> {emoji} {new_state.upper()}")
+            print(f"{direction} 左转灯 -> {emoji} {new_state.upper()}")
 
     def set_direction(self, direction: str, state: str):
         """
@@ -160,7 +160,7 @@ class ManualSignalController:
         """
         if direction in self.current_states:
             self.current_states[direction] = state
-            print(f"🚦 {direction} -> {state}")
+            print(f"{direction} -> {state}")
 
     def handle_keyboard(self, key: int):
         """
@@ -311,8 +311,8 @@ def create_timeline_template(output_path: str = "./signal_timeline.json"):
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(template, f, indent=2, ensure_ascii=False)
 
-    print(f"✅ 信号灯时间轴模板已创建: {output_path}")
-    print("💡 请根据你的视频内容修改时间段和信号灯状态")
+    print(f"信号灯时间轴模板已创建: {output_path}")
+    print("请根据你的视频内容修改时间段和信号灯状态")
 
 
 if __name__ == "__main__":

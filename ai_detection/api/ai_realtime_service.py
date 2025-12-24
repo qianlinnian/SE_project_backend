@@ -12,7 +12,7 @@ AI 实时检测服务 - TrafficMind 交通智脑
     conda activate yolov8
     cd SE_project_backend/ai_detection
     pip install flask flask-socketio flask-cors eventlet requests
-    python ai_realtime_service.py
+    python api/ai_realtime_service.py
 
 服务地址: http://localhost:5000
 WebSocket: ws://localhost:5000
@@ -34,6 +34,12 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
+# 添加父目录到 Python 路径，确保可以导入 core 模块
+_CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
+_AI_DETECTION_DIR = os.path.dirname(_CURRENT_FILE_DIR)
+if _AI_DETECTION_DIR not in sys.path:
+    sys.path.insert(0, _AI_DETECTION_DIR)
+
 
 def convert_to_serializable(obj):
     """将 NumPy 类型转换为 Python 原生类型，以便 JSON 序列化"""
@@ -53,18 +59,18 @@ def convert_to_serializable(obj):
 
 
 # 导入现有的检测模块
-from violation_detector import ViolationDetector
-from vehicle_tracker import VehicleTracker
-from signal_adapter import SignalAdapter
+from core.violation_detector import ViolationDetector
+from core.vehicle_tracker import VehicleTracker
+from ai_detection.tools.signal_adapter import SignalAdapter
 
 # ==================== 配置 ====================
 BACKEND_BASE_URL = "http://localhost:8081/api"
 MINIO_ENDPOINT = "http://localhost:9000"
 ROIS_PATH = "./data/rois.json"
-MODEL_PATH = "./yolov8s.pt"  # Small 模型，更准确（也可用 yolov8n.pt 更快）
+MODEL_PATH = "./yolov8s.pt"  # Small 模型，更准确（也可用 yolov8s.pt 更快）
 TEMP_VIDEO_DIR = "./temp_videos"
-OUTPUT_VIDEO_DIR = "./output_videos"
-VIOLATIONS_DIR = "./violations"
+OUTPUT_VIDEO_DIR = "./output/videos"
+VIOLATIONS_DIR = "./output/screenshots"
 
 # 实时推流配置
 TARGET_FPS = 12  # 推送帧率（降低以减少带宽）
@@ -660,6 +666,373 @@ def draw_detection_results(frame, tracks, violations, detector, tracker=None):
     return annotated
 
 
+# ==================== 图片检测模块 ====================
+
+# 延迟导入图片检测模块（避免启动时加载）
+_image_detector = None
+
+def get_image_detector():
+    """获取图片检测器（懒加载）"""
+    global _image_detector
+    if _image_detector is None:
+        try:
+            from core.image_violation_detector import ImageViolationDetector
+            _image_detector = ImageViolationDetector(
+                rois_path=ROIS_PATH,
+                model_path=MODEL_PATH,
+                screenshot_dir=VIOLATIONS_DIR,
+                intersection_id=1,
+                enable_api=True
+            )
+            print("[图片检测] 图片检测器初始化成功")
+        except Exception as e:
+            print(f"[图片检测] 初始化失败: {e}")
+            return None
+    return _image_detector
+
+
+@app.route('/detect-image', methods=['POST'])
+def detect_image():
+    """
+    检测单张图片的交通违规（闯红灯+压实线变道）
+
+    请求方式: multipart/form-data
+    参数:
+        - image: 图片文件 (必填)
+        - signals: 信号灯状态JSON (可选)
+                  格式: {"north_bound": "red", "south_bound": "green", ...}
+        - detect_types: 检测类型 (可选，默认检测两种)
+                       格式: "red_light" 或 "lane_change" 或 "red_light,lane_change"
+
+    返回:
+        {
+            "success": true,
+            "image_name": "xxx.jpg",
+            "image_size": [width, height],
+            "total_violations": 2,
+            "violations": [...],
+            "summary": {
+                "red_light": 1,
+                "lane_change": 1
+            }
+        }
+    """
+    try:
+        # 1. 验证图片文件
+        if 'image' not in request.files:
+            return jsonify({
+                "success": False,
+                "message": "缺少图片文件 (image)"
+            }), 400
+
+        image_file = request.files['image']
+        if image_file.filename == '':
+            return jsonify({
+                "success": False,
+                "message": "未选择图片文件"
+            }), 400
+
+        # 2. 解析信号灯状态
+        signal_states = None
+        signals_param = request.form.get('signals')
+        if signals_param:
+            try:
+                signal_states = json.loads(signals_param)
+            except json.JSONDecodeError:
+                return jsonify({
+                    "success": False,
+                    "message": "信号灯状态JSON格式错误"
+                }), 400
+
+        # 3. 解析检测类型
+        detect_types = ['red_light', 'lane_change']
+        detect_param = request.form.get('detect_types')
+        if detect_param:
+            detect_types = [t.strip() for t in detect_param.split(',')]
+            # 验证检测类型
+            valid_types = {'red_light', 'lane_change'}
+            for t in detect_types:
+                if t not in valid_types:
+                    return jsonify({
+                        "success": False,
+                        "message": f"不支持的检测类型: {t}，可选值: red_light, lane_change"
+                    }), 400
+
+        # 4. 读取图片
+        import numpy as np
+        import io
+        image_bytes = image_file.read()
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if image is None:
+            return jsonify({
+                "success": False,
+                "message": "无法解析图片文件"
+            }), 400
+
+        # 5. 执行检测
+        detector = get_image_detector()
+        if detector is None:
+            return jsonify({
+                "success": False,
+                "message": "图片检测器初始化失败"
+            }), 500
+
+        result = detector.process_image(
+            image_path=image_file.filename,
+            signal_states=signal_states,
+            detect_types=detect_types
+        )
+
+        if result is None:
+            return jsonify({
+                "success": False,
+                "message": "图片处理失败"
+            }), 500
+
+        # 6. 返回结果
+        return jsonify({
+            "success": True,
+            "image_name": image_file.filename,
+            "image_size": [image.shape[1], image.shape[0]],
+            "total_violations": result['total_violations'],
+            "violations": convert_to_serializable(result['violations']),
+            "summary": {
+                "red_light": result['red_light_violations'],
+                "lane_change": result['lane_change_violations']
+            },
+            "timestamp": datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": f"检测失败: {str(e)}"
+        }), 500
+
+
+@app.route('/detect-image-base64', methods=['POST'])
+def detect_image_base64():
+    """
+    检测Base64编码图片的交通违规
+
+    请求体 (JSON):
+    {
+        "image": "base64编码的图片数据",
+        "signals": {"north_bound": "red", ...},  // 可选
+        "detect_types": "red_light,lane_change"   // 可选
+    }
+
+    返回: 同 /detect-image
+    """
+    try:
+        data = request.json
+
+        # 1. 验证图片数据
+        if 'image' not in data:
+            return jsonify({
+                "success": False,
+                "message": "缺少图片数据 (image)"
+            }), 400
+
+        # 2. 解析图片
+        import base64
+        image_data = data['image']
+        if ',' in image_data:
+            # 处理 data:image/jpeg;base64, 前缀
+            image_data = image_data.split(',')[1]
+
+        image_bytes = base64.b64decode(image_data)
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if image is None:
+            return jsonify({
+                "success": False,
+                "message": "无法解析图片数据"
+            }), 400
+
+        # 3. 解析信号灯状态
+        signal_states = data.get('signals')
+
+        # 4. 解析检测类型
+        detect_types = ['red_light', 'lane_change']
+        detect_param = data.get('detect_types')
+        if detect_param:
+            detect_types = [t.strip() for t in detect_param.split(',')]
+
+        # 5. 执行检测
+        detector = get_image_detector()
+        if detector is None:
+            return jsonify({
+                "success": False,
+                "message": "图片检测器初始化失败"
+            }), 500
+
+        result = detector.process_image(
+            image_path="uploaded_image.jpg",
+            signal_states=signal_states,
+            detect_types=detect_types
+        )
+
+        if result is None:
+            return jsonify({
+                "success": False,
+                "message": "图片处理失败"
+            }), 500
+
+        # 6. 返回结果
+        return jsonify({
+            "success": True,
+            "image_size": [image.shape[1], image.shape[0]],
+            "total_violations": result['total_violations'],
+            "violations": convert_to_serializable(result['violations']),
+            "summary": {
+                "red_light": result['red_light_violations'],
+                "lane_change": result['lane_change_violations']
+            },
+            "timestamp": datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": f"检测失败: {str(e)}"
+        }), 500
+
+
+@app.route('/detect-batch', methods=['POST'])
+def detect_batch():
+    """
+    批量检测多张图片
+
+    请求方式: multipart/form-data
+    参数:
+        - images: 多张图片文件 (必填)
+        - signals: 信号灯状态JSON (可选)
+        - detect_types: 检测类型 (可选)
+
+    返回:
+        {
+            "success": true,
+            "total_images": 10,
+            "processed_images": 10,
+            "total_violations": 5,
+            "results": [
+                {
+                    "image_name": "img1.jpg",
+                    "violations": [...]
+                },
+                ...
+            ]
+        }
+    """
+    try:
+        # 1. 验证图片文件
+        if 'images' not in request.files:
+            return jsonify({
+                "success": False,
+                "message": "缺少图片文件 (images)"
+            }), 400
+
+        image_files = request.files.getlist('images')
+        if not image_files or all(f.filename == '' for f in image_files):
+            return jsonify({
+                "success": False,
+                "message": "未选择任何图片文件"
+            }), 400
+
+        # 2. 解析信号灯状态
+        signal_states = None
+        signals_param = request.form.get('signals')
+        if signals_param:
+            signal_states = json.loads(signals_param)
+
+        # 3. 解析检测类型
+        detect_types = ['red_light', 'lane_change']
+        detect_param = request.form.get('detect_types')
+        if detect_param:
+            detect_types = [t.strip() for t in detect_param.split(',')]
+
+        # 4. 初始化检测器
+        detector = get_image_detector()
+        if detector is None:
+            return jsonify({
+                "success": False,
+                "message": "图片检测器初始化失败"
+            }), 500
+
+        # 5. 批量处理
+        import io
+        total_violations = 0
+        results = []
+
+        for image_file in image_files:
+            if image_file.filename == '':
+                continue
+
+            try:
+                image_bytes = image_file.read()
+                nparr = np.frombuffer(image_bytes, np.uint8)
+                image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                if image is None:
+                    results.append({
+                        "image_name": image_file.filename,
+                        "success": False,
+                        "message": "无法解析图片"
+                    })
+                    continue
+
+                result = detector.process_image(
+                    image_path=image_file.filename,
+                    signal_states=signal_states,
+                    detect_types=detect_types
+                )
+
+                if result:
+                    total_violations += result['total_violations']
+                    results.append({
+                        "image_name": image_file.filename,
+                        "success": True,
+                        "total_violations": result['total_violations'],
+                        "red_light": result['red_light_violations'],
+                        "lane_change": result['lane_change_violations']
+                    })
+                else:
+                    results.append({
+                        "image_name": image_file.filename,
+                        "success": True,
+                        "total_violations": 0
+                    })
+
+            except Exception as img_error:
+                results.append({
+                    "image_name": image_file.filename,
+                    "success": False,
+                    "message": str(img_error)
+                })
+
+        return jsonify({
+            "success": True,
+            "total_images": len(image_files),
+            "processed_images": len([r for r in results if r.get('success')]),
+            "total_violations": total_violations,
+            "results": results,
+            "timestamp": datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": f"批量检测失败: {str(e)}"
+        }), 500
+
+
 # ==================== 启动服务 ====================
 
 if __name__ == '__main__':
@@ -669,12 +1042,16 @@ if __name__ == '__main__':
     print(f"📍 HTTP API:    http://localhost:5000")
     print(f"📍 WebSocket:   ws://localhost:5000")
     print("=" * 60)
-    print("📡 API 端点:")
-    print(f"   GET  /health           - 健康检查")
+    print("📡 API 端点 - 视频流检测:")
     print(f"   POST /start-realtime   - 启动实时处理任务")
     print(f"   POST /test-local       - 本地视频测试")
     print(f"   POST /api/traffic      - 接收信号灯数据 ⭐")
     print(f"   GET  /api/traffic/status - 获取当前信号灯状态")
+    print("=" * 60)
+    print("📡 API 端点 - 图片检测 (新增):")
+    print(f"   POST /detect-image         - 检测单张图片文件 ⭐")
+    print(f"   POST /detect-image-base64  - 检测Base64图片")
+    print(f"   POST /detect-batch         - 批量检测多张图片")
     print("=" * 60)
     
     # 检查必要文件

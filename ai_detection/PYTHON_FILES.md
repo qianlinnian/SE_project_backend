@@ -1,184 +1,235 @@
-# AI 检测模块 - Python 文件汇总
+# AI 违规检测模块 - Python 文件说明
 
-> TrafficMind 智慧交通管理系统 - AI 违规检测模块
-> 
-> 更新日期: 2025-12-23
+> TrafficMind 交通智脑 - AI 违规检测模块
+>
+> 更新日期: 2025-12-24
 
 ---
 
-## 📁 目录结构
+## 目录结构
 
 ```
 ai_detection/
-├── 🚀 核心服务
-│   └── ai_realtime_service.py    # 实时检测服务（WebSocket）⭐ 主服务
+├── api/                        # API 服务层
+│   ├── ai_realtime_service.py  # 实时检测服务（WebSocket + HTTP）主服务
+│   ├── detection_api.py        # 图片检测 API（Flask）
+│   └── backend_api_client.py   # 后端 API 客户端
 │
-├── 🔧 核心模块
-│   ├── violation_detector.py     # 违规检测器
-│   ├── vehicle_tracker.py        # 车辆追踪器（YOLOv8）
-│   ├── backend_api_client.py     # 后端 API 客户端
-│   └── signal_adapter.py         # 信号灯适配器
+├── core/                       # 核心检测模块
+│   ├── violation_detector.py   # 视频流违规检测器（需轨迹）
+│   ├── image_violation_detector.py  # 图片违规检测器（单帧）
+│   └── vehicle_tracker.py      # 车辆追踪器（YOLOv8 + DeepSORT）
 │
-├── 🎮 运行脚本
-│   ├── main_pipeline.py          # 主流程（自动信号灯）
-│   ├── main_pipeline_manual.py   # 主流程（手动信号灯）
-│   └── manual_signal_controller.py # 手动信号灯控制器
+├── scripts/                    # 测试脚本
+│   ├── test_image.py           # 图片检测测试 常用
+│   ├── test_realtime_service.py    # 实时服务测试
+│   ├── test_flask_api.py           # Flask API 测试
+│   ├── test_backend_integration.py # 后端集成测试
+│   ├── test_yolo_simple.py         # YOLO 简单测试
+│   ├── visualize_detection.py      # 检测结果可视化
+│   ├── main_pipeline.py            # 主流程（自动信号灯）
+│   └── manual_signal_controller.py # 手动信号灯控制
 │
-├── 🧪 测试脚本
-│   ├── test_realtime_service.py  # 实时服务测试
-│   └── test_backend_integration.py # 后端集成测试
+├── tools/                      # 工具脚本
+│   ├── signal_adapter.py       # 信号灯格式适配器
+│   ├── roi_labeler.py          # ROI 标注工具
+│   ├── roi_visualizer.py       # ROI 可视化工具
+│   └── video_rotator.py        # 视频旋转工具
 │
-├── 🛠️ 工具脚本
-│   └── Utility/
-│       ├── roi_labeler.py        # ROI 标注工具
-│       ├── roi_visualizer.py     # ROI 可视化工具
-│       └── video_rotator.py      # 视频旋转工具
+├── data/                       # 输入数据
+│   ├── rois.json               # ROI 区域配置
+│   └── *.mp4                   # 测试视频
 │
-├── 📦 配置文件
-│   ├── requirements.txt          # Python 依赖
-│   └── data/rois.json            # ROI 配置
+├── output/                     # 输出目录
+│   ├── videos/                 # 处理后的视频
+│   ├── screenshots/            # 违规截图
+│   └── reports/                # 违规记录 JSON
 │
-└── 📂 输出目录
-    ├── violations/               # 违规截图
-    ├── output_videos/            # 处理后的视频
-    └── temp_videos/              # 临时视频文件
+├── requirements.txt            # Python 依赖
+└── yolov8s.pt                  # YOLOv8 模型（需下载）
 ```
 
 ---
 
-## 🚀 核心服务
+## 快速开始
 
-### 1. ai_realtime_service.py ⭐
+### 1. 安装依赖
 
-**功能**: AI 实时检测服务，支持 WebSocket 实时推流
+```bash
+cd ai_detection
+conda activate yolov8
+pip install -r requirements.txt
+```
 
-**端口**: `http://localhost:5000`
+### 2. 启动服务
 
-**API 端点**:
+**方式一：启动 Flask API（图片检测）**
+```bash
+cd ai_detection/api
+python detection_api.py
+# 服务运行在 http://localhost:5000
+```
+
+**方式二：启动实时检测服务（视频流 + WebSocket）**
+```bash
+cd ai_detection/api
+python ai_realtime_service.py
+# HTTP: http://localhost:5000
+# WebSocket: ws://localhost:5000
+```
+
+### 3. 测试图片检测
+
+```bash
+# 检测单张图片
+python scripts/test_image.py --image ./data/car_1_red.png
+
+# 批量检测
+python scripts/test_image.py --folder ./data
+
+# 指定信号灯状态
+python scripts/test_image.py --image ./data/car_1_red.png     --signals north_bound=red,south_bound=green,west_bound=green,east_bound=red
+```
+
+---
+
+## API 服务
+
+### detection_api.py - 图片检测 API
+
+端口: http://localhost:5000
+
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/health` | GET | 健康检查 |
-| `/start-realtime` | POST | 启动实时处理任务 |
-| `/test-local` | POST | 本地视频测试 |
-| `/api/traffic` | POST | 接收信号灯数据 |
-| `/api/traffic/status` | GET | 获取当前信号灯状态 |
-| `/task/<id>` | GET | 查询任务状态 |
+| /health | GET | 健康检查 |
+| /detect-image | POST | 检测图片（multipart/form-data） |
+| /detect-image-base64 | POST | 检测 Base64 图片 |
 
-**WebSocket 事件**:
+调用示例:
+```python
+import requests
+
+# 检测图片
+response = requests.post('http://localhost:5000/detect-image',
+    files={'image': open('test.jpg', 'rb')},
+    data={'signals': '{"north_bound": "red", "south_bound": "green"}'}
+)
+result = response.json()
+```
+
+### ai_realtime_service.py - 实时检测服务
+
+端口: http://localhost:5000
+
+HTTP 端点:
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| /health | GET | 健康检查 |
+| /start-realtime | POST | 启动实时处理任务 |
+| /test-local | POST | 本地视频测试 |
+| /api/traffic | POST | 接收信号灯数据 |
+| /api/traffic/status | GET | 获取信号灯状态 |
+| /detect-image | POST | 图片检测 |
+| /detect-image-base64 | POST | Base64 图片检测 |
+
+WebSocket 事件:
 | 事件 | 方向 | 说明 |
 |------|------|------|
-| `frame` | 服务端→客户端 | 实时处理帧（Base64 JPEG） |
-| `violation` | 服务端→客户端 | 违规检测事件 |
-| `complete` | 服务端→客户端 | 处理完成通知 |
-| `signal_update` | 服务端→客户端 | 信号灯状态更新 |
-| `error` | 服务端→客户端 | 错误通知 |
-
-**启动命令**:
-```bash
-conda activate yolov8
-python ai_realtime_service.py
-```
+| frame | 服务端→客户端 | 实时处理帧（Base64 JPEG） |
+| violation | 服务端→客户端 | 违规检测事件 |
+| complete | 服务端→客户端 | 处理完成通知 |
+| signal_update | 服务端→客户端 | 信号灯状态更新 |
 
 ---
 
-## 🔧 核心模块
+## 核心模块
 
-### 3. violation_detector.py
+### violation_detector.py
 
-**功能**: 违规检测器，核心检测逻辑
+功能: 视频流违规检测器（需要车辆追踪轨迹）
 
-**检测类型**:
-| 类型 | 内部名称 | API 名称 |
+检测类型:
+| 类型 | 内部名称 | API 类型 |
 |------|---------|---------|
-| 闯红灯 | `red_light_running` | `RED_LIGHT` |
-| 逆行 | `wrong_way_driving` | `WRONG_WAY` |
-| 跨实线变道 | `lane_change_across_solid_line` | `CROSS_SOLID_LINE` |
-| 待转区违规 | `waiting_area_*` | `ILLEGAL_TURN` |
+| 闯红灯 | red_light_running | RED_LIGHT |
+| 逆行 | wrong_way_driving | WRONG_WAY |
+| 跨实线变道 | lane_change_across_solid_line | CROSS_SOLID_LINE |
+| 待转区违规 | waiting_area_* | ILLEGAL_TURN |
 
-**主要方法**:
+使用:
 ```python
+from core.violation_detector import ViolationDetector
+
 detector = ViolationDetector(
     rois_path="./data/rois.json",
-    screenshot_dir="./violations",
+    screenshot_dir="./output/screenshots",
     intersection_id=1,
     enable_api=True
 )
 
-# 处理一帧
-violations = detector.process_frame(frame, detections, timestamp)
-
-# 更新信号灯状态
-detector.update_signal_state('north_bound', 'red')
-detector.update_left_turn_signal('north_bound', 'green')
-
-# 获取统计
-summary = detector.get_violation_summary()
+# 处理视频帧（需要先追踪车辆）
+violations = detector.process_frame(frame, tracks, timestamp_ms)
 ```
 
----
+### image_violation_detector.py
 
-### 4. vehicle_tracker.py
+功能: 图片违规检测器（单帧检测，无需轨迹）
 
-**功能**: 车辆检测与追踪（基于 YOLOv8）
+检测类型:
+| 类型 | 说明 |
+|------|------|
+| 闯红灯 | 检测车辆是否在红灯状态下位于停止线内 |
+| 跨实线变道 | 检测车辆中心点到实线的距离 |
 
-**主要类**:
-- `VehicleTracker` - 车辆追踪器
-- `SimpleTrafficLightDetector` - 简单信号灯模拟器
-
-**主要方法**:
+使用:
 ```python
+from core.image_violation_detector import ImageViolationDetector
+
+detector = ImageViolationDetector(
+    rois_path="./data/rois.json",
+    model_path="yolov8s.pt",
+    screenshot_dir="./output/screenshots",
+    enable_api=False
+)
+
+# 检测图片
+result = detector.process_image(
+    image_path="test.jpg",
+    signal_states={"north_bound": "red"},
+    detect_types=["red_light", "lane_change"]
+)
+```
+
+### vehicle_tracker.py
+
+功能: 车辆检测与追踪（YOLOv8 + DeepSORT）
+
+使用:
+```python
+from core.vehicle_tracker import VehicleTracker
+
 tracker = VehicleTracker(
     model_path="yolov8s.pt",
     conf_threshold=0.25
 )
 
 # 检测并追踪
-detections = tracker.detect_and_track(frame)
+tracks = tracker.detect_and_track(frame)
 # 返回: [(track_id, (x1, y1, x2, y2)), ...]
 
 # 绘制检测结果
-annotated_frame = tracker.draw_detections(frame, detections)
+annotated = tracker.draw_detections(frame, tracks)
 ```
 
 ---
 
-### 5. backend_api_client.py
+## 工具脚本
 
-**功能**: 后端 API 客户端，与 Java 后端通信
+### signal_adapter.py
 
-**主要方法**:
-```python
-client = BackendAPIClient("http://localhost:8081/api")
+功能: 信号灯数据格式转换（后端格式 → 系统格式）
 
-# 健康检查
-is_healthy = client.health_check()
-
-# 上报违规
-violation_id = client.report_violation({
-    'intersectionId': 1,
-    'direction': 'SOUTH',
-    'turnType': 'STRAIGHT',
-    'plateNumber': '京A12345',
-    'violationType': 'RED_LIGHT',
-    'imageUrl': 'http://...',
-    'aiConfidence': 0.95,
-    'occurredAt': '2025-12-23T21:00:00'
-})
-
-# 获取信号灯状态
-status = client.get_signal_status(1, 'SOUTH', 'STRAIGHT')
-
-# 获取路口整体状态
-all_status = client.get_intersection_status(1)
-```
-
----
-
-### 6. signal_adapter.py
-
-**功能**: 信号灯数据格式转换
-
-**信号代码**:
+信号代码:
 | 代码 | 含义 | 绿灯方向 |
 |------|------|---------|
 | ETWT | 东西直行 | east_bound, west_bound |
@@ -186,183 +237,75 @@ all_status = client.get_intersection_status(1)
 | ELWL | 东西左转 | east_bound, west_bound |
 | NLSL | 南北左转 | north_bound, south_bound |
 
-**主要方法**:
+使用:
 ```python
-from signal_adapter import SignalAdapter
+from tools.signal_adapter import SignalAdapter
 
-# 格式1: JSON 列表
+# 格式转换
 backend_data = [
     {"路口": 0, "信号": "ETWT", "排队车辆": 4},
-    {"路口": 1, "信号": "NTST", "排队车辆": 0},
 ]
 signal_states = SignalAdapter.convert_backend_to_system(backend_data)
-# 返回: {'north_bound': 'green', 'south_bound': 'green', ...}
-
-# 格式2: 文本格式
-text = "路口0: 信号=ETWT, 排队车辆=4\n路口1: 信号=NTST, 排队车辆=0"
-signal_states = SignalAdapter.convert_backend_string_format(text)
+# 返回: {'north_bound': 'red', 'south_bound': 'red', 'east_bound': 'green', 'west_bound': 'green'}
 ```
 
 ---
 
-## 🎮 运行脚本
+## 输出目录
 
-### 7. main_pipeline.py
+```
+output/
+├── videos/        # 处理后的视频文件 (*.mp4)
+│   └── *_result.mp4
+├── screenshots/   # 违规车辆截图 (*.jpg)
+│   ├── RED_*.jpg  # 闯红灯截图
+│   └── LANE_*.jpg # 压线截图
+└── reports/       # 违规记录 JSON
+    └── *_violations.json
+```
 
-**功能**: 完整的交通违规检测管道（自动信号灯模拟）
+---
 
-**使用场景**: 本地视频测试，信号灯自动循环切换
+## 文件调用关系
+
+```
+api/detection_api.py
+    └── core/image_violation_detector.py
+            └── tools/signal_adapter.py
+
+api/ai_realtime_service.py (主服务)
+    ├── core/violation_detector.py
+    │   └── api/backend_api_client.py
+    ├── core/vehicle_tracker.py
+    └── tools/signal_adapter.py
+
+scripts/test_image.py (常用测试)
+    └── core/image_violation_detector.py
+
+scripts/main_pipeline.py
+    ├── core/violation_detector.py
+    └── core/vehicle_tracker.py
+
+scripts/manual_signal_controller.py
+    ├── core/violation_detector.py
+    ├── core/vehicle_tracker.py
+    └── scripts/manual_signal_controller.py
+```
+
+---
+
+## 注意事项
+
+1. 后端服务: Java 后端需运行在 http://localhost:8081
+2. 数据库: 需要 Docker 运行 MySQL、Redis、MinIO
+3. 模型文件: yolov8s.pt 需从 Ultralytics 下载
+4. 临时文件: temp_videos/ 目录用于临时视频存储
+
+---
+
+## 依赖安装
 
 ```bash
-python main_pipeline.py --video ./data/car_1_cross.mp4 --model yolov8s.pt
+pip install opencv-python ultralytics flask flask-cors flask-socketio
+pip install requests numpy eventlet
 ```
-
----
-
-### 8. main_pipeline_manual.py
-
-**功能**: 完整的交通违规检测管道（手动信号灯控制）
-
-**使用场景**: 自制测试视频，需要手动控制信号灯
-
-**键盘控制**:
-- `1-4` - 切换直行信号灯（全红/全绿/南北绿/东西绿）
-- `5-6` - 切换左转信号灯
-- `N/S/W/E` - 单独切换某方向
-- `Q` - 退出
-
-```bash
-python main_pipeline_manual.py --video ./data/car_1_cross.mp4
-```
-
----
-
-### 9. manual_signal_controller.py
-
-**功能**: 手动信号灯控制器
-
-**使用场景**: 被 main_pipeline_manual.py 调用
-
----
-
-## 🧪 测试脚本
-
-### 10. test_realtime_service.py
-
-**功能**: 测试 AI 实时服务
-
-```bash
-# 先启动服务
-python ai_realtime_service.py
-
-# 另开终端测试
-python test_realtime_service.py
-```
-
----
-
-### 11. test_backend_integration.py
-
-**功能**: 测试与 Java 后端的集成
-
-```bash
-# 确保 Java 后端运行在 8081 端口
-python test_backend_integration.py
-```
-
----
-
-## 🛠️ 工具脚本
-
-### 12. Utility/roi_labeler.py
-
-**功能**: ROI 区域标注工具
-
-**用途**: 为新的视频/摄像头创建 ROI 配置
-
----
-
-### 13. Utility/roi_visualizer.py
-
-**功能**: ROI 可视化工具
-
-**用途**: 查看和验证 ROI 配置是否正确
-
----
-
-### 14. Utility/video_rotator.py
-
-**功能**: 视频旋转工具
-
-**用途**: 旋转视频角度
-
----
-
-## 📦 依赖安装
-
-```bash
-conda activate yolov8
-pip install -r requirements.txt
-```
-
-**主要依赖**:
-- `opencv-python` - 图像处理
-- `ultralytics` - YOLOv8
-- `flask` - HTTP 服务
-- `flask-socketio` - WebSocket
-- `requests` - HTTP 客户端
-
----
-
-## 🚀 快速开始
-
-### 启动实时检测服务
-
-```bash
-# 1. 激活环境
-conda activate yolov8
-
-# 2. 进入目录
-cd SE_project_backend/ai_detection
-
-# 3. 启动服务
-python ai_realtime_service.py
-```
-
-### 测试服务
-
-```bash
-# 新开终端
-python test_realtime_service.py
-```
-
----
-
-## 📊 文件依赖关系
-
-```
-ai_realtime_service.py
-├── violation_detector.py
-│   └── backend_api_client.py
-├── vehicle_tracker.py
-└── signal_adapter.py
-
-main_pipeline.py
-├── violation_detector.py
-└── vehicle_tracker.py
-
-main_pipeline_manual.py
-├── violation_detector.py
-├── vehicle_tracker.py
-└── manual_signal_controller.py
-```
-
----
-
-## 📝 版本历史
-
-| 版本 | 日期 | 说明 |
-|------|------|------|
-| 2.0.0 | 2025-12-23 | 新增 WebSocket 实时推流、信号灯接口 |
-| 1.0.0 | 2025-12-22 | 初始版本，基础检测功能 |
-

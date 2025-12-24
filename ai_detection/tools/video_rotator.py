@@ -28,7 +28,7 @@ def rotate_video(input_path, output_path, rotation_angle=90, auto_detect=False):
     # 打开视频
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
-        print(f"❌ 无法打开视频: {input_path}")
+        print(f"无法打开视频: {input_path}")
         return
     
     # 获取视频属性
@@ -94,7 +94,7 @@ def rotate_video(input_path, output_path, rotation_angle=90, auto_detect=False):
     cap.release()
     out.release()
     
-    print(f"✅ 旋转完成！保存到: {output_path}")
+    print(f"旋转完成！保存到: {output_path}")
     print(f"   处理了 {frame_count} 帧")
 
 

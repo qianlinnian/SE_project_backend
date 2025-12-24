@@ -102,7 +102,7 @@ def main():
                 if 'left_turn_waiting_area' not in saved_data[direction]:
                     saved_data[direction]['left_turn_waiting_area'] = []
             
-            print(f"✅ 已加载现有ROI数据: {OUTPUT_JSON}")
+            print(f"已加载现有ROI数据: {OUTPUT_JSON}")
             
             # 统计已有数据
             num_solid_lines = len(saved_data.get('solid_lines', []))
@@ -133,8 +133,8 @@ def main():
     print("【4】: 实线 (青色) - 车道分界线 (2个点定义一条线)")
     print("【5】: 左转待转区 (橙色) - 左转车辆等待区域")
     print("")
-    print("💡 实线检测原理: 只要车辆穿越实线就算违规，无需标记车道编号")
-    print("💡 待转区用途: 标记左转车辆在绿灯时可以进入等待的区域")
+    print("实线检测原理: 只要车辆穿越实线就算违规，无需标记车道编号")
+    print("待转区用途: 标记左转车辆在绿灯时可以进入等待的区域")
     print("--- 操作 ---")
     print("【D】: 保存当前标注")
     print("【Z】: 撤销点")
@@ -289,7 +289,7 @@ def main():
                         'coordinates': current_points.copy()
                     }
                     saved_data['solid_lines'].append(solid_line_data)
-                    print(f"✅ 已保存实线: {solid_line_name}")
+                    print(f"已保存实线: {solid_line_name}")
                     current_points = []
                 else:
                     print(f"⚠️ 实线需要恰好2个点 (当前: {len(current_points)})")
@@ -297,13 +297,13 @@ def main():
             elif len(current_points) >= 3:
                 if current_category == 'stop_line':
                     saved_data[current_direction]['stop_line'].append(current_points.copy())
-                    print(f"✅ Saved: {current_direction} -> stop_line")
+                    print(f"Saved: {current_direction} -> stop_line")
                 elif current_category == 'left_turn_waiting_area':
                     saved_data[current_direction]['left_turn_waiting_area'].append(current_points.copy())
-                    print(f"✅ Saved: {current_direction} -> left_turn_waiting_area")
+                    print(f"Saved: {current_direction} -> left_turn_waiting_area")
                 else:
                     saved_data[current_direction]['lanes'][current_flow].append(current_points.copy())
-                    print(f"✅ Saved: {current_direction} -> {current_category} -> {current_flow}")
+                    print(f"Saved: {current_direction} -> {current_category} -> {current_flow}")
                 
                 current_points = []
             else:
@@ -318,9 +318,9 @@ def main():
     try:
         with open(OUTPUT_JSON, 'w', encoding='utf-8') as f:
             json.dump(saved_data, f, indent=2, ensure_ascii=False)
-        print(f"\n✅ 已保存到: {OUTPUT_JSON}")
+        print(f"\n已保存到: {OUTPUT_JSON}")
     except Exception as e:
-        print(f"\n❌ 保存失败: {e}")
+        print(f"\n保存失败: {e}")
     
     # 控制台打印
     print("\n" + "="*50)

@@ -15,12 +15,12 @@ from collections import defaultdict
 class VehicleTracker:
     """车辆检测与追踪器"""
 
-    def __init__(self, model_path: str = "yolov8n.pt", conf_threshold: float = 0.25, iou_threshold: float = 0.45):
+    def __init__(self, model_path: str = "yolov8s.pt", conf_threshold: float = 0.25, iou_threshold: float = 0.45):
         """
         初始化车辆追踪器
 
         Args:
-            model_path: YOLOv8 模型路径（默认使用预训练的 yolov8n.pt）
+            model_path: YOLOv8 模型路径（默认使用预训练的 yolov8s.pt）
                        推荐: yolov8s.pt (更好的检测效果) 或 yolov8m.pt (平衡)
             conf_threshold: 置信度阈值 (降低可减少漏检，0.2-0.3推荐)
             iou_threshold: IOU阈值用于NMS (降低可保留更多重叠目标)
@@ -36,7 +36,7 @@ class VehicleTracker:
         # 简单的轨迹追踪（使用 YOLOv8 内置的追踪）
         self.track_history = defaultdict(list)
 
-        print("✅ 车辆追踪器初始化成功！")
+        print("车辆追踪器初始化成功！")
 
     def detect_and_track(self, frame):
         """
@@ -134,7 +134,7 @@ class SimpleTrafficLightDetector:
         self.start_time = None
         self.previous_states = {}  # 缓存上一次的状态，用于检测变化
 
-        print(f"🚦 信号灯模拟器已启动（周期: {cycle_seconds}秒）")
+        print(f"信号灯模拟器已启动（周期: {cycle_seconds}秒）")
 
     def get_signal_states(self, current_time):
         """
@@ -189,18 +189,18 @@ if __name__ == "__main__":
     print("🧪 测试车辆追踪器")
     print("=" * 50)
 
-    tracker = VehicleTracker(model_path="yolov8n.pt")
+    tracker = VehicleTracker(model_path="yolov8s.pt")
 
     # 加载测试图片
     frame = cv2.imread("./data/background.png")
     if frame is None:
-        print("❌ 无法加载测试图片")
+        print("无法加载测试图片")
     else:
-        print("✅ 开始检测...")
+        print("开始检测...")
         detections = tracker.detect_and_track(frame)
-        print(f"📊 检测到 {len(detections)} 辆车")
+        print(f"检测到 {len(detections)} 辆车")
 
         # 绘制结果
         result_frame = tracker.draw_detections(frame, detections)
         cv2.imwrite("./data/detection_result.png", result_frame)
-        print("✅ 检测结果已保存: ./data/detection_result.png")
+        print("检测结果已保存: ./data/detection_result.png")

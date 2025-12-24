@@ -8,8 +8,8 @@ ROI可视化工具 - 渲染和显示ROI配置
 4. 保存可视化结果
 
 使用方法：
-    python Utility/roi_visualizer.py
-    python Utility/roi_visualizer.py --rois data/rois.json --bg data/background.png
+    python tools/roi_visualizer.py
+    python tools/roi_visualizer.py --rois data/rois.json --bg data/background.png
 """
 
 import cv2
@@ -46,7 +46,7 @@ class ROIVisualizer:
         with open(self.rois_path, 'r', encoding='utf-8') as f:
             self.rois = json.load(f)
         
-        print(f"✅ 已加载ROI配置: {self.rois_path}")
+        print(f"已加载ROI配置: {self.rois_path}")
         
     def load_background(self):
         """
@@ -58,13 +58,13 @@ class ROIVisualizer:
         if self.background_path and self.background_path.exists():
             img = cv2.imread(str(self.background_path))
             if img is not None:
-                print(f"✅ 已加载背景图: {self.background_path}")
+                print(f"已加载背景图: {self.background_path}")
                 return img
             else:
                 print(f"⚠️ 无法加载背景图: {self.background_path}")
         
         # 创建空白图片 (1920x1080, 黑色背景)
-        print("📝 使用空白背景")
+        print("使用空白背景")
         return np.zeros((1080, 1920, 3), dtype=np.uint8)
     
     def draw_solid_lines(self, frame):
@@ -275,7 +275,7 @@ class ROIVisualizer:
         """
         result = self.visualize(alpha=alpha)
         cv2.imwrite(output_path, result)
-        print(f"✅ ROI可视化已保存: {output_path}")
+        print(f"ROI可视化已保存: {output_path}")
         return result
     
     def show(self, alpha=0.4, window_name="ROI Visualization"):
@@ -330,7 +330,7 @@ def main():
         visualizer.show(alpha=args.alpha)
     
     print("="*60)
-    print("✅ 完成！")
+    print("完成！")
     print("="*60)
 
 

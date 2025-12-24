@@ -38,9 +38,7 @@ Desktop.ini
 *.key
 
 # AI Detection Data and Violations
-/ai_detection/data/
-/ai_detection/violations/
-/ai_detection/output_videos/
+/ai_detection/output/
 /ai_detection/*.pt
 /ai_detection/temp_videos
 /ai_detection/*.json
@@ -52,4 +50,7 @@ Desktop.ini
 /ai_detection/*.mkv
 /ai_detection/*.m4v
 /ai_detection/*.m4a
-/ai_detection/__pycache__/
+**/__pycache__/
+.claude
+*.mp4
+*.png

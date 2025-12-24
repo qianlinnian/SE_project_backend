@@ -14,8 +14,8 @@ import argparse
 from pathlib import Path
 import json
 
-from vehicle_tracker import VehicleTracker, SimpleTrafficLightDetector
-from violation_detector import ViolationDetector
+from core.vehicle_tracker import VehicleTracker, SimpleTrafficLightDetector
+from core.violation_detector import ViolationDetector
 
 
 class TrafficViolationPipeline:
@@ -24,7 +24,7 @@ class TrafficViolationPipeline:
     def __init__(
         self,
         rois_path: str,
-        model_path: str = "yolov8n.pt",
+        model_path: str = "yolov8s.pt",
         screenshot_dir: str = "./violations",
         signal_cycle: float = 60.0
     ):
@@ -53,7 +53,7 @@ class TrafficViolationPipeline:
         self.traffic_light = SimpleTrafficLightDetector(cycle_seconds=signal_cycle)
 
         print("=" * 60)
-        print("✅ 所有模块初始化完成！\n")
+        print("所有模块初始化完成！\n")
 
     def process_video(self, video_path: str, output_path: str = None, display: bool = True):
         """
@@ -69,7 +69,7 @@ class TrafficViolationPipeline:
         # 打开视频
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            print(f"❌ 无法打开视频: {video_path}")
+            print(f"无法打开视频: {video_path}")
             return
 
         # 获取视频信息
@@ -147,15 +147,15 @@ class TrafficViolationPipeline:
         # 统计结果
         elapsed_time = time.time() - start_time
         print("\n" + "=" * 60)
-        print("✅ 处理完成！")
+        print("处理完成！")
         print("=" * 60)
         print(f"  总帧数: {frame_count}")
         print(f"  处理时间: {elapsed_time:.2f}秒")
         print(f"  平均FPS: {frame_count / elapsed_time:.2f}")
-        print(f"\n📊 违规统计:")
+        print(f"\n违规统计:")
 
         summary = self.violation_detector.get_violation_summary()
-        print(f"  🚨 总违规数: {summary['total_violations']}")
+        print(f"   总违规数: {summary['total_violations']}")
         print(f"    - 闯红灯: {summary['red_light_running']}")
         print(f"    - 逆行: {summary['wrong_way_driving']}")
         print(f"    - 跨实线变道: {summary['lane_change_across_solid_line']}")
@@ -235,7 +235,7 @@ def main():
     parser = argparse.ArgumentParser(description="TrafficMind - 交通违规检测系统")
     parser.add_argument("--video", type=str, required=True, help="输入视频路径")
     parser.add_argument("--rois", type=str, default="./data/rois.json", help="ROI配置文件")
-    parser.add_argument("--model", type=str, default="yolov8n.pt", help="YOLOv8模型路径（默认yolov8n.pt，速度更快）")
+    parser.add_argument("--model", type=str, default="yolov8s.pt", help="YOLOv8模型路径（默认yolov8s.pt，速度更快）")
     parser.add_argument("--output", type=str, default=None, help="输出视频路径")
     parser.add_argument("--no-display", action="store_true", help="不实时显示")
     parser.add_argument("--signal-cycle", type=float, default=60.0, help="信号灯周期(秒)，默认60秒")

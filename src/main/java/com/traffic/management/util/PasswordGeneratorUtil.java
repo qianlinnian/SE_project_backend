@@ -19,7 +19,7 @@ public class PasswordGeneratorUtil {
         
         // 验证
         boolean matches = encoder.matches(password, hash);
-        System.out.println("验证结果: " + (matches ? "✅ 匹配成功" : "❌ 匹配失败"));
+        System.out.println("验证结果: " + (matches ? "匹配成功" : "匹配失败"));
         
         // 输出SQL语句
         System.out.println("\n复制下面的SQL语句到03-seed-data.sql:");

@@ -93,7 +93,7 @@ class ViolationDetector:
                 self.api_client = BackendAPIClient()
                 # 测试连接
                 if self.api_client.health_check():
-                    print("[API] ✅ 后端连接成功，违规将自动上报到 http://localhost:8081")
+                    print("[API] 后端连接成功，违规将自动上报到 http://localhost:8081")
                 else:
                     print("[API] ⚠️ 后端连接失败，将只记录本地违规")
                     self.enable_api = False
@@ -172,12 +172,12 @@ class ViolationDetector:
             
             if violation_id:
                 violation_record['backend_id'] = violation_id
-                print(f"[API] ✅ 上报成功! 后端ID: {violation_id}")
+                print(f"[API] 上报成功! 后端ID: {violation_id}")
             else:
-                print(f"[API] ❌ 上报失败")
+                print(f"[API] 上报失败")
                 
         except Exception as e:
-            print(f"[API] ❌ 上报异常: {type(e).__name__}: {e}")
+            print(f"[API] 上报异常: {type(e).__name__}: {e}")
 
     def update_signal_state(self, direction: str, state: str, force_print=False):
         """
@@ -1068,7 +1068,7 @@ class ViolationDetector:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)
 
-        print(f"✅ 违规记录已导出: {output_path}")
+        print(f"违规记录已导出: {output_path}")
 
 
 if __name__ == "__main__":
@@ -1084,8 +1084,8 @@ if __name__ == "__main__":
         enable_api=True         # 启用API上报
     )
 
-    print(f"\n✅ 违规检测器初始化成功！")
-    print(f"📊 加载了 {len(detector.rois)} 个方向的ROI配置")
+    print(f"\n违规检测器初始化成功！")
+    print(f"加载了 {len(detector.rois)} 个方向的ROI配置")
     print(f"🔗 API上报: {'已启用' if detector.enable_api else '已禁用'}")
     print(f"🏢 路口ID: {detector.intersection_id}")
     print("=" * 60)

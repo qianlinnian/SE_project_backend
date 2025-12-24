@@ -195,13 +195,13 @@ if __name__ == "__main__":
     adapter = SignalAdapter()
     system_states = adapter.convert_backend_to_system(test_backend_data)
     
-    print("🚦 后端信号转换结果：")
+    print("后端信号转换结果：")
     for direction, state in system_states.items():
         emoji = "🟢" if state == "green" else "🔴"
         print(f"  {direction:15s}: {emoji} {state}")
     
     # 分析信号代码
-    print("\n📊 信号代码分析：")
+    print("\n信号代码分析：")
     unique_signals = set(item['信号'] for item in test_backend_data)
     for signal in sorted(unique_signals):
         allowed = SignalAdapter.parse_signal_code(signal)
@@ -209,7 +209,7 @@ if __name__ == "__main__":
     
     # 测试文本格式
     print("\n" + "="*50)
-    print("📝 测试文本格式解析：")
+    print("测试文本格式解析：")
     test_text = """路口0: 信号=ETWT, 排队车辆=4
 路口1: 信号=NTST, 排队车辆=0
 路口2: 信号=ETWT, 排队车辆=1

@@ -167,24 +167,40 @@ class BackendAPIClient:
         """
         上传违章截图到服务器
 
-        注意：当前后端可能没有文件上传接口，此方法返回本地文件路径
-        如果后端有MinIO或其他对象存储接口，需要修改此方法
-
         Args:
             image_path: 本地图片路径
 
         Returns:
-            图片URL（当前返回本地file://路径）
+            图片URL（成功返回后端URL，失败返回本地路径）
         """
-        # TODO: 如果后端提供文件上传接口，实现真实上传逻辑
-        # 示例：
-        # url = f"{self.base_url}/upload"
-        # with open(image_path, 'rb') as f:
-        #     files = {'file': f}
-        #     response = self.session.post(url, files=files)
-        #     return response.json().get('url')
+        import os
 
-        # 当前返回本地路径
+        if not os.path.exists(image_path):
+            print(f"[API]  文件不存在: {image_path}")
+            return f"file://{image_path}"
+
+        try:
+            url = f"{self.base_url}/files/upload"
+            with open(image_path, 'rb') as f:
+                files = {'file': (os.path.basename(image_path), f, 'image/jpeg')}
+                data = {'type': 'violation'}
+                response = self.session.post(url, files=files, data=data, timeout=10)
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    image_url = result.get('url')
+                    print(f"[API]  图片上传成功: {image_url}")
+                    return image_url
+                else:
+                    print(f"[API]  图片上传失败: {result.get('message')}")
+            else:
+                print(f"[API]  图片上传失败 HTTP {response.status_code}")
+
+        except Exception as e:
+            print(f"[API]  图片上传异常: {type(e).__name__}: {e}")
+
+        # 上传失败，返回本地路径作为备选
         return f"file://{image_path}"
 
     def health_check(self) -> bool:

@@ -33,20 +33,20 @@ def test_health_check():
         response = requests.get(f"{AI_SERVICE_URL}/health", timeout=5)
         if response.status_code == 200:
             data = response.json()
-            print(f"✅ 服务状态: {data.get('status')}")
+            print(f"服务状态: {data.get('status')}")
             print(f"   服务名称: {data.get('service')}")
             print(f"   版本: {data.get('version')}")
             print(f"   WebSocket: {data.get('websocket')}")
             return True
         else:
-            print(f"❌ HTTP 状态码: {response.status_code}")
+            print(f"HTTP 状态码: {response.status_code}")
             return False
     except requests.exceptions.ConnectionError:
-        print("❌ 无法连接到 AI 服务")
+        print("无法连接到 AI 服务")
         print("   请先启动: python ai_realtime_service.py")
         return False
     except Exception as e:
-        print(f"❌ 错误: {e}")
+        print(f"错误: {e}")
         return False
 
 
@@ -66,7 +66,7 @@ def test_websocket_with_local_video():
     
     @sio.on('connect')
     def on_connect():
-        print("✅ WebSocket 已连接")
+        print("WebSocket 已连接")
     
     @sio.on('disconnect')
     def on_disconnect():
@@ -97,14 +97,14 @@ def test_websocket_with_local_video():
     def on_violation(data):
         violations.append(data)
         v = data.get('violation', {})
-        print(f"   🚨 违规检测! 类型: {v.get('type')} | 车辆ID: {v.get('track_id')} | 帧: {data.get('frameNumber')}")
+        print(f"    违规检测! 类型: {v.get('type')} | 车辆ID: {v.get('track_id')} | 帧: {data.get('frameNumber')}")
     
     @sio.on('complete')
     def on_complete(data):
         nonlocal task_id
         result = data.get('result', {})
         print("\n" + "=" * 50)
-        print("✅ 处理完成!")
+        print("处理完成!")
         print("=" * 50)
         print(f"   总帧数: {result.get('totalFrames')}")
         print(f"   处理时间: {result.get('elapsedTime')}秒")
@@ -113,7 +113,7 @@ def test_websocket_with_local_video():
         print(f"   输出视频: {result.get('outputVideoPath')}")
         
         summary = result.get('violationSummary', {})
-        print(f"\n   📊 违规统计:")
+        print(f"\n   违规统计:")
         print(f"      - 闯红灯: {summary.get('red_light_running', 0)}")
         print(f"      - 逆行: {summary.get('wrong_way_driving', 0)}")
         print(f"      - 跨实线: {summary.get('lane_change_across_solid_line', 0)}")
@@ -123,7 +123,7 @@ def test_websocket_with_local_video():
     
     @sio.on('error')
     def on_error(data):
-        print(f"❌ 错误: {data.get('message')}")
+        print(f"错误: {data.get('message')}")
         sio.disconnect()
     
     try:
@@ -145,15 +145,15 @@ def test_websocket_with_local_video():
             data = response.json()
             if data.get('success'):
                 task_id = data.get('taskId')
-                print(f"✅ 任务已启动: {task_id}")
+                print(f"任务已启动: {task_id}")
                 print(f"   视频路径: {data.get('videoPath')}")
                 print("\n等待接收实时帧...")
             else:
-                print(f"❌ 启动失败: {data.get('message')}")
+                print(f"启动失败: {data.get('message')}")
                 sio.disconnect()
                 return
         else:
-            print(f"❌ HTTP 错误: {response.status_code}")
+            print(f"HTTP 错误: {response.status_code}")
             sio.disconnect()
             return
         
@@ -161,9 +161,9 @@ def test_websocket_with_local_video():
         sio.wait()
         
     except socketio.exceptions.ConnectionError as e:
-        print(f"❌ WebSocket 连接失败: {e}")
+        print(f"WebSocket 连接失败: {e}")
     except Exception as e:
-        print(f"❌ 错误: {e}")
+        print(f"错误: {e}")
         import traceback
         traceback.print_exc()
     finally:
