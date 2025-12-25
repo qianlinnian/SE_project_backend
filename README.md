@@ -23,6 +23,12 @@ docker-compose ps
 # 查看MySQL初始化日志（等待初始化完成）
 docker-compose logs -f traffic-db
 ```
+ 
+### java
+```powershell
+cd d:\course_content\SE\seprojects\SE_project_backend
+mvn spring-boot:run
+```
 
 ### 3. 访问数据库
 - **Adminer管理界面**: http://localhost:8080
@@ -64,7 +70,6 @@ docker-compose down
 # 停止并删除所有数据（谨慎使用）
 docker-compose down -v
 ```
-
 ## 测试数据说明
 
 ### 测试账户

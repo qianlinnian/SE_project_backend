@@ -30,13 +30,14 @@ import traceback
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
 # 添加父目录到 Python 路径，确保可以导入 core 模块
 _CURRENT_FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 _AI_DETECTION_DIR = os.path.dirname(_CURRENT_FILE_DIR)
+_AI_DETECTION_PATH = Path(_AI_DETECTION_DIR)
 if _AI_DETECTION_DIR not in sys.path:
     sys.path.insert(0, _AI_DETECTION_DIR)
 
@@ -61,16 +62,16 @@ def convert_to_serializable(obj):
 # 导入现有的检测模块
 from core.violation_detector import ViolationDetector
 from core.vehicle_tracker import VehicleTracker
-from ai_detection.tools.signal_adapter import SignalAdapter
+from tools.signal_adapter import SignalAdapter
 
 # ==================== 配置 ====================
 BACKEND_BASE_URL = "http://localhost:8081/api"
 MINIO_ENDPOINT = "http://localhost:9000"
-ROIS_PATH = "./data/rois.json"
-MODEL_PATH = "./yolov8s.pt"  # Small 模型，更准确（也可用 yolov8s.pt 更快）
-TEMP_VIDEO_DIR = "./temp_videos"
-OUTPUT_VIDEO_DIR = "./output/videos"
-VIOLATIONS_DIR = "./output/screenshots"
+ROIS_PATH = str(_AI_DETECTION_PATH / "data" / "rois.json")
+MODEL_PATH = str(_AI_DETECTION_PATH / "yolov8s.pt")  # Small 模型，更准确
+TEMP_VIDEO_DIR = str(_AI_DETECTION_PATH / "temp_videos")
+OUTPUT_VIDEO_DIR = str(_AI_DETECTION_PATH / "output" / "videos")
+VIOLATIONS_DIR = str(_AI_DETECTION_PATH / "output" / "screenshots")
 
 # 实时推流配置
 TARGET_FPS = 12  # 推送帧率（降低以减少带宽）
@@ -118,6 +119,21 @@ def health_check():
         "timestamp": datetime.now().isoformat(),
         "websocket": "available"
     })
+
+
+@app.route('/screenshots/<filename>', methods=['GET'])
+def get_screenshot(filename):
+    """
+    获取违规快照图片
+
+    Args:
+        filename: 图片文件名 (例如: RED_north_bound_1_1234567890.jpg)
+
+    Returns:
+        图片文件
+    """
+    screenshots_dir = _AI_DETECTION_PATH / "output" / "screenshots"
+    return send_from_directory(str(screenshots_dir), filename)
 
 
 @app.route('/api/traffic', methods=['POST'])
@@ -218,11 +234,93 @@ def get_traffic_signal_status():
         })
 
 
+@app.route('/upload-video', methods=['POST'])
+def upload_video():
+    """
+    上传视频文件并启动实时检测任务
+
+    请求方式: multipart/form-data
+    参数:
+        - video: 视频文件
+        - taskId: 任务ID（可选）
+        - intersectionId: 路口ID（可选，默认1）
+        - direction: 检测方向（可选，默认SOUTH）
+
+    返回:
+    {
+        "success": true,
+        "taskId": "xxx",
+        "videoPath": "/path/to/saved/video.mp4",
+        "message": "视频已上传，任务已启动"
+    }
+    """
+    try:
+        # 检查是否有文件
+        if 'video' not in request.files:
+            return jsonify({
+                "success": False,
+                "message": "没有上传视频文件"
+            }), 400
+
+        video_file = request.files['video']
+        if video_file.filename == '':
+            return jsonify({
+                "success": False,
+                "message": "文件名为空"
+            }), 400
+
+        # 获取参数
+        task_id = request.form.get('taskId', f"task_{int(time.time())}")
+        intersection_id = int(request.form.get('intersectionId', 1))
+        direction = request.form.get('direction', 'SOUTH')
+
+        # 保存视频文件
+        video_filename = f"{task_id}_{video_file.filename}"
+        video_path = os.path.join(TEMP_VIDEO_DIR, video_filename)
+        video_file.save(video_path)
+
+        print(f"✅ 视频已保存: {video_path}")
+        print(f"📝 任务ID: {task_id}")
+        print(f"🔍 路口ID: {intersection_id}, 方向: {direction}")
+
+        # 初始化任务状态
+        tasks[task_id] = {
+            "status": "starting",
+            "progress": 0,
+            "startTime": datetime.now().isoformat(),
+            "violations": [],
+            "error": None,
+            "videoPath": video_path
+        }
+
+        # 异步启动处理
+        thread = threading.Thread(
+            target=process_video_realtime,
+            args=(task_id, None, video_path, intersection_id, direction)
+        )
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({
+            "success": True,
+            "taskId": task_id,
+            "videoPath": video_path,
+            "message": "视频已上传，任务已启动。请通过 WebSocket 连接并订阅此任务ID"
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": f"上传失败: {str(e)}"
+        }), 500
+
+
 @app.route('/start-realtime', methods=['POST'])
 def start_realtime_processing():
     """
-    启动实时视频处理任务
-    
+    启动实时视频处理任务（使用已有的视频URL或路径）
+
     请求体:
     {
         "taskId": "xxx",
@@ -231,7 +329,7 @@ def start_realtime_processing():
         "intersectionId": 1,
         "direction": "SOUTH"
     }
-    
+
     返回:
     {
         "success": true,
@@ -499,14 +597,24 @@ def process_video_realtime(task_id: str, video_url: str, video_path: str,
                 for v in new_violations:
                     v['frameNumber'] = frame_count
                     v['timestamp'] = datetime.now().isoformat()
+
+                    # 添加快照 URL（如果有快照）
+                    if v.get('screenshot'):
+                        # 从完整路径中提取文件名
+                        screenshot_path = Path(v['screenshot'])
+                        filename = screenshot_path.name
+                        v['screenshotUrl'] = f"http://localhost:5000/screenshots/{filename}"
+
                     violations_detected.append(v)
-                    
+
                     # 推送违规事件（转换 NumPy 类型）
-                    socketio.emit('violation', convert_to_serializable({
+                    violation_data = convert_to_serializable({
                         'taskId': task_id,
                         'violation': v,
                         'frameNumber': frame_count
-                    }))
+                    })
+                    socketio.emit('violation', violation_data)
+                    print(f"[WebSocket] 推送违规事件: {v.get('type')} Track {v.get('track_id')} @ Frame {frame_count}")
             
             # 按帧间隔推送（控制帧率）
             if frame_count % frame_interval == 0:
@@ -758,14 +866,22 @@ def detect_image():
                         "message": f"不支持的检测类型: {t}，可选值: red_light, lane_change"
                     }), 400
 
-        # 4. 读取图片
+        # 4. 保存图片到临时文件
+        import tempfile
         import numpy as np
-        import io
-        image_bytes = image_file.read()
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
+        # 创建临时文件
+        temp_dir = Path(TEMP_VIDEO_DIR)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_image_path = temp_dir / f"temp_{int(time.time())}_{image_file.filename}"
+
+        # 保存上传的图片
+        image_file.save(str(temp_image_path))
+
+        # 读取图片验证
+        image = cv2.imread(str(temp_image_path))
         if image is None:
+            temp_image_path.unlink(missing_ok=True)  # 删除临时文件
             return jsonify({
                 "success": False,
                 "message": "无法解析图片文件"
@@ -774,30 +890,46 @@ def detect_image():
         # 5. 执行检测
         detector = get_image_detector()
         if detector is None:
+            temp_image_path.unlink(missing_ok=True)
             return jsonify({
                 "success": False,
                 "message": "图片检测器初始化失败"
             }), 500
 
         result = detector.process_image(
-            image_path=image_file.filename,
+            image_path=str(temp_image_path),
             signal_states=signal_states,
             detect_types=detect_types
         )
 
         if result is None:
+            temp_image_path.unlink(missing_ok=True)
             return jsonify({
                 "success": False,
                 "message": "图片处理失败"
             }), 500
 
-        # 6. 返回结果
+        # 6. 将标注后的图片转为 base64
+        annotated_image = result.get('annotated_image')
+        annotated_image_base64 = None
+
+        if annotated_image is not None:
+            # 编码为JPEG
+            success, buffer = cv2.imencode('.jpg', annotated_image, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if success:
+                annotated_image_base64 = base64.b64encode(buffer).decode('utf-8')
+
+        # 检测完成后删除临时文件
+        temp_image_path.unlink(missing_ok=True)
+
+        # 7. 返回结果
         return jsonify({
             "success": True,
             "image_name": image_file.filename,
             "image_size": [image.shape[1], image.shape[0]],
             "total_violations": result['total_violations'],
             "violations": convert_to_serializable(result['violations']),
+            "annotated_image": annotated_image_base64,  # 新增：标注后的图片(base64)
             "summary": {
                 "red_light": result['red_light_violations'],
                 "lane_change": result['lane_change_violations']

@@ -14,6 +14,14 @@ import time
 import argparse
 from pathlib import Path
 import json
+import os
+import sys
+
+# 添加父目录到 Python 路径，确保可以导入 core 模块
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_AI_DETECTION_DIR = os.path.dirname(_SCRIPT_DIR)
+if _AI_DETECTION_DIR not in sys.path:
+    sys.path.insert(0, _AI_DETECTION_DIR)
 
 from core.vehicle_tracker import VehicleTracker
 from core.violation_detector import ViolationDetector
@@ -129,10 +137,12 @@ class TrafficViolationPipelineManual:
                     frame = cv2.rotate(frame, cv2.ROTATE_180)
 
             frame_count += 1
-            current_time = time.time()
 
             # 计算视频时间（用于时间轴配置）
             video_time = (frame_count - 1) / fps
+
+            # 计算时间戳（毫秒），与 API 服务保持一致
+            timestamp_ms = frame_count / fps * 1000
 
             # ========== 1. 车辆检测与追踪 ==========
             detections = self.tracker.detect_and_track(frame)
@@ -146,14 +156,14 @@ class TrafficViolationPipelineManual:
             # 更新违规检测器的信号灯状态
             for direction, state in signal_states.items():
                 self.violation_detector.traffic_lights[direction] = state
-            
+
             # 更新左转信号灯状态
             for direction, state in left_turn_signals.items():
                 self.violation_detector.left_turn_signals[direction] = state
 
             # ========== 3. 违规检测 ==========
             violations = self.violation_detector.process_frame(
-                frame, detections, current_time
+                frame, detections, timestamp_ms
             )
 
             # ========== 4. 可视化 ==========
@@ -300,8 +310,9 @@ class TrafficViolationPipelineManual:
         summary = self.violation_detector.get_violation_summary()
         y_offset = frame.shape[0] - 60
 
-        stats_text = f"Time: {video_time:.1f}s | Violations: {summary['total_violations']} " \
-                     f"(Red: {summary['red_light_running']} | Wrong Way: {summary['wrong_way_driving']} | Lane Change: {summary['lane_change_across_solid_line']})"
+        stats_text = f"Time: {video_time:.1f}s | Total: {summary['total_violations']} | " \
+                     f"Red: {summary['red_light_running']} | Wrong: {summary['wrong_way_driving']} | " \
+                     f"Lane: {summary['lane_change_across_solid_line']} | Wait: {summary['waiting_area_red_entry'] + summary['waiting_area_illegal_exit']}"
 
         # 背景
         cv2.rectangle(frame, (0, y_offset - 35), (frame.shape[1], frame.shape[0]), (0, 0, 0), -1)

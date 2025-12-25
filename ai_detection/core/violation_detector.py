@@ -363,7 +363,7 @@ class ViolationDetector:
 
         return None
 
-    def detect_wrong_way(self, track_id: int, current_pos, timestamp):
+    def detect_wrong_way(self, track_id: int, current_pos, timestamp, bbox=None, frame=None):
         """
         检测逆行违规
 
@@ -376,6 +376,8 @@ class ViolationDetector:
             track_id: 车辆追踪ID
             current_pos: 当前位置 (x, y)
             timestamp: 时间戳
+            bbox: 车辆边界框 (x1, y1, x2, y2)，可选
+            frame: 当前帧图像，可选
 
         Returns:
             dict or None: 违规记录，如果没有违规则返回 None
@@ -436,6 +438,14 @@ class ViolationDetector:
                         print(f"  轨迹点数: {len(trajectory)}, 时间跨度: {trajectory[-1][2] - trajectory[0][2]:.1f}秒")
                         
                         violation_id = f"WRONG_{direction}_{track_id}_{int(timestamp)}"
+
+                        # 保存违规快照
+                        screenshot_path = None
+                        if bbox is not None and frame is not None:
+                            screenshot_path = self.save_violation_screenshot(
+                                frame, bbox, violation_id, "wrong_way"
+                            )
+
                         violation_record = {
                             'id': violation_id,
                             'type': 'wrong_way_driving',
@@ -443,7 +453,10 @@ class ViolationDetector:
                             'direction': direction,
                             'lane_type': 'in',
                             'lane_index': lane_idx,
-                            'timestamp': datetime.fromtimestamp(timestamp).isoformat(),
+                            'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
+                            'location': current_pos,
+                            'bbox': bbox,
+                            'screenshot': str(screenshot_path) if screenshot_path else None,
                             'trajectory': trajectory
                         }
                         self.violations.append(violation_record)
@@ -469,6 +482,14 @@ class ViolationDetector:
                             return None  # 在冷却期内，跳过
                         
                         violation_id = f"WRONG_{direction}_{track_id}_{int(timestamp)}"
+
+                        # 保存违规快照
+                        screenshot_path = None
+                        if bbox is not None and frame is not None:
+                            screenshot_path = self.save_violation_screenshot(
+                                frame, bbox, violation_id, "wrong_way"
+                            )
+
                         violation_record = {
                             'id': violation_id,
                             'type': 'wrong_way_driving',
@@ -476,7 +497,10 @@ class ViolationDetector:
                             'direction': direction,
                             'lane_type': 'out',
                             'lane_index': lane_idx,
-                            'timestamp': datetime.fromtimestamp(timestamp).isoformat(),
+                            'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
+                            'location': current_pos,
+                            'bbox': bbox,
+                            'screenshot': str(screenshot_path) if screenshot_path else None,
                             'trajectory': trajectory
                         }
                         self.violations.append(violation_record)
@@ -824,7 +848,7 @@ class ViolationDetector:
             bottom_center_pos = (int((x1 + x2) / 2), int(y2))
 
             wrong_way_violation = self.detect_wrong_way(
-                track_id, bottom_center_pos, timestamp
+                track_id, bottom_center_pos, timestamp, bbox, frame
             )
             if wrong_way_violation:
                 frame_violations.append(wrong_way_violation)

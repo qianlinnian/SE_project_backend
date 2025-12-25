@@ -15,7 +15,9 @@ from flask_cors import CORS
 from datetime import datetime
 
 # 添加项目根目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent))
+_API_DIR = Path(__file__).parent
+_AI_DETECTION_DIR = _API_DIR.parent
+sys.path.insert(0, str(_AI_DETECTION_DIR))
 
 from core.image_violation_detector import ImageViolationDetector
 
@@ -28,9 +30,9 @@ print("  初始化 AI 违规检测服务")
 print("=" * 60)
 
 detector = ImageViolationDetector(
-    rois_path="./data/rois.json",
-    model_path="yolov8s.pt",
-    screenshot_dir="./output/screenshots",
+    rois_path=str(_AI_DETECTION_DIR / "data" / "rois.json"),
+    model_path=str(_AI_DETECTION_DIR / "yolov8s.pt"),
+    screenshot_dir=str(_AI_DETECTION_DIR / "output" / "screenshots"),
     enable_api=True  # 启用后端API集成
 )
 

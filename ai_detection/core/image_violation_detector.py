@@ -518,13 +518,28 @@ class ImageViolationDetector:
         # 保存所有违规
         self.violations.extend(all_violations)
 
+        # 绘制标注图片
+        annotated_image = image.copy()
+        for violation in all_violations:
+            bbox = violation.get('bbox')
+            if bbox:
+                x1, y1, x2, y2 = map(int, bbox)
+                # 绘制边界框 (红色)
+                cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 0, 255), 3)
+
+                # 添加违规类型标签
+                label = violation['type'].replace('_', ' ').title()
+                cv2.putText(annotated_image, label, (x1, y1 - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
         # 统计结果
         result = {
             'image_path': image_path,
             'total_violations': len(all_violations),
             'red_light_violations': sum(1 for v in all_violations if v['type'] == 'red_light_running'),
             'lane_change_violations': sum(1 for v in all_violations if v['type'] == 'lane_change_across_solid_line'),
-            'violations': all_violations
+            'violations': all_violations,
+            'annotated_image': annotated_image  # 新增：返回标注后的图片
         }
 
         print(f"\n检测完成: 共发现 {len(all_violations)} 个违规")
@@ -564,13 +579,28 @@ class ImageViolationDetector:
             all_violations.extend(lane_violations)
             print(f"  发现 {len(lane_violations)} 个跨实线变道违规")
 
+        # 绘制标注图片
+        annotated_image = image.copy()
+        for violation in all_violations:
+            bbox = violation.get('bbox')
+            if bbox:
+                x1, y1, x2, y2 = map(int, bbox)
+                # 绘制边界框 (红色)
+                cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 0, 255), 3)
+
+                # 添加违规类型标签
+                label = violation['type'].replace('_', ' ').title()
+                cv2.putText(annotated_image, label, (x1, y1 - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
         # 统计结果
         result = {
             'image_name': image_name,
             'total_violations': len(all_violations),
             'red_light_violations': len([v for v in all_violations if v['type'] == 'red_light_running']),
             'lane_change_violations': len([v for v in all_violations if v['type'] == 'lane_change_across_solid_line']),
-            'violations': all_violations
+            'violations': all_violations,
+            'annotated_image': annotated_image  # 新增：返回标注后的图片
         }
 
         # 保存到实例变量
