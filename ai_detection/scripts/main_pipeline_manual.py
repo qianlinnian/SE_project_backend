@@ -266,7 +266,7 @@ class TrafficViolationPipelineManual:
 
     def _draw_signal_panel(self, frame, signal_states, left_turn_signals):
         """绘制信号灯状态面板（右上角）"""
-        panel_x = frame.shape[1] - 350
+        panel_x = frame.shape[1] - 380
         panel_y = 30
 
         # 标题
@@ -276,7 +276,7 @@ class TrafficViolationPipelineManual:
         )
 
         # 各方向状态
-        y_offset = panel_y + 30
+        y_offset = panel_y + 35
         direction_names = {
             'north_bound': 'North',
             'south_bound': 'South',
@@ -285,41 +285,101 @@ class TrafficViolationPipelineManual:
         }
 
         for direction, state in signal_states.items():
-            color = (0, 255, 0) if state == 'green' else (0, 0, 255)
-            
-            # 直行灯
-            text = f"{direction_names[direction]}: {state.upper()}"
+            # 绘制方向标签
             cv2.putText(
-                frame, text, (panel_x, y_offset),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2
+                frame, direction_names[direction], (panel_x, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1
             )
-            
-            # 左转灯（显示在同一行）
+
+            # 绘制直行信号灯（圆形）
+            light_color = (0, 255, 0) if state == 'green' else (0, 0, 255) if state == 'red' else (0, 255, 255)
+            cv2.circle(frame, (panel_x + 80, y_offset - 5), 10, light_color, -1)
+            cv2.circle(frame, (panel_x + 80, y_offset - 5), 10, (255, 255, 255), 1)
+
+            # 绘制左转信号灯（圆形）
             left_state = left_turn_signals.get(direction, 'red')
-            left_color = (0, 255, 0) if left_state == 'green' else (0, 0, 255)
-            left_text = f"L:{left_state[:1].upper()}"
+            left_light_color = (0, 255, 0) if left_state == 'green' else (0, 0, 255) if left_state == 'red' else (0, 255, 255)
+            cv2.circle(frame, (panel_x + 120, y_offset - 5), 8, left_light_color, -1)
+            cv2.circle(frame, (panel_x + 120, y_offset - 5), 8, (255, 255, 255), 1)
+
+            # 左转标签
             cv2.putText(
-                frame, left_text, (panel_x + 200, y_offset),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, left_color, 2
+                frame, "L", (panel_x + 135, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1
             )
-            
-            y_offset += 25
+
+            y_offset += 30
 
     def _draw_statistics(self, frame, video_time):
         """绘制统计信息（底部）"""
         summary = self.violation_detector.get_violation_summary()
-        y_offset = frame.shape[0] - 60
 
-        stats_text = f"Time: {video_time:.1f}s | Total: {summary['total_violations']} | " \
-                     f"Red: {summary['red_light_running']} | Wrong: {summary['wrong_way_driving']} | " \
-                     f"Lane: {summary['lane_change_across_solid_line']} | Wait: {summary['waiting_area_red_entry'] + summary['waiting_area_illegal_exit']}"
+        # 获取当前信号灯状态（从违规检测器）
+        signal_states = self.violation_detector.traffic_lights
+        left_turn_signals = self.violation_detector.left_turn_signals
 
-        # 背景
-        cv2.rectangle(frame, (0, y_offset - 35), (frame.shape[1], frame.shape[0]), (0, 0, 0), -1)
+        # 背景区域
+        panel_height = 80
+        y_offset = frame.shape[0] - panel_height + 20
+        cv2.rectangle(frame, (0, y_offset - 25), (frame.shape[1], frame.shape[0]), (0, 0, 0), -1)
+
+        # ========== 1. 绘制红绿灯可视化（左侧） ==========
+        light_x = 20
+        light_y = y_offset
+        light_radius = 12
+        light_spacing = 50
+
+        direction_names = {
+            'north_bound': 'N',
+            'south_bound': 'S',
+            'west_bound': 'W',
+            'east_bound': 'E'
+        }
+
+        for i, (direction, state) in enumerate(signal_states.items()):
+            # 绘制方向标签
+            cv2.putText(
+                frame, direction_names[direction], (light_x + i * light_spacing - 5, light_y + 35),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1
+            )
+
+            # 绘制圆形信号灯（直行）
+            light_color = (0, 255, 0) if state == 'green' else (0, 0, 255) if state == 'red' else (0, 255, 255)
+            cv2.circle(frame, (light_x + i * light_spacing, light_y), light_radius, light_color, -1)
+            cv2.circle(frame, (light_x + i * light_spacing, light_y), light_radius, (255, 255, 255), 1)
+
+            # 绘制左转信号灯（在下方）
+            left_state = left_turn_signals.get(direction, 'red')
+            left_light_color = (0, 255, 0) if left_state == 'green' else (0, 0, 255) if left_state == 'red' else (0, 255, 255)
+            cv2.circle(frame, (light_x + i * light_spacing, light_y + 25), 8, left_light_color, -1)
+            cv2.circle(frame, (light_x + i * light_spacing, light_y + 25), 8, (255, 255, 255), 1)
+
+        # ========== 2. 绘制违规统计（中间） ==========
+        stats_x = 250
+        stats_y = y_offset
+
+        # 使用简洁的格式显示统计
+        stats_text = f"⏱ {video_time:.1f}s  |  " \
+                     f"🚦 {summary['red_light_running']}  |  " \
+                     f"⬅️ {summary['wrong_way_driving']}  |  " \
+                     f"〰️ {summary['lane_change_across_solid_line']}  |  " \
+                     f"🔴 {summary['waiting_area_red_entry'] + summary['waiting_area_illegal_exit']}"
 
         cv2.putText(
-            frame, stats_text, (10, y_offset),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2
+            frame, stats_text, (stats_x, stats_y + 5),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2
+        )
+
+        # ========== 3. 绘制总违规数（右侧） ==========
+        total_text = f"Total: {summary['total_violations']}"
+        text_size = cv2.getTextSize(total_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
+        total_x = frame.shape[1] - text_size[0] - 20
+
+        # 绘制总违规数背景框
+        cv2.rectangle(frame, (total_x - 10, stats_y - 25), (frame.shape[1] - 10, stats_y + 30), (0, 0, 140), -1)
+        cv2.putText(
+            frame, total_text, (total_x, stats_y + 5),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2
         )
 
     def _draw_controls_hint(self, frame):

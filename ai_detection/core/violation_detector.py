@@ -34,6 +34,9 @@ class ViolationDetector:
         with open(rois_path, 'r', encoding='utf-8') as f:
             self.rois = json.load(f)
 
+        # 计算路口中心点（用于判断车辆进入/离开路口）
+        self.intersection_center = self._calculate_intersection_center()
+
         # 创建截图保存目录
         self.screenshot_dir = Path(screenshot_dir)
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
@@ -80,7 +83,7 @@ class ViolationDetector:
         # 违规去重记录 {(track_id, violation_type): last_timestamp}
         # 用于防止同一车辆短时间内重复记录相同类型的违规
         self.violation_cooldown = {}
-        self.cooldown_period = 1000.0  # 冷却时间：1000ms
+        self.cooldown_period = 10000.0  # 冷却时间：10000ms (10秒)
 
         # ========== API 集成配置 ==========
         self.intersection_id = intersection_id
@@ -106,6 +109,38 @@ class ViolationDetector:
 
     # ========== API 映射方法 ==========
     
+    def _calculate_intersection_center(self):
+        """
+        计算路口中心点
+
+        通过所有方向的停止线中心点的平均值来估算路口中心
+
+        Returns:
+            tuple: (center_x, center_y)
+        """
+        all_points = []
+
+        for direction, data in self.rois.items():
+            if direction == 'solid_lines':
+                continue
+
+            # 获取每个方向的停止线多边形
+            for stop_line_poly in data.get('stop_line', []):
+                # 计算停止线的中心点
+                points = np.array(stop_line_poly)
+                center = points.mean(axis=0)
+                all_points.append(center)
+
+        if all_points:
+            # 所有停止线中心点的平均值作为路口中心
+            all_points = np.array(all_points)
+            intersection_center = all_points.mean(axis=0)
+            print(f"[路口中心] 计算得到路口中心点: ({intersection_center[0]:.1f}, {intersection_center[1]:.1f})")
+            return tuple(intersection_center)
+        else:
+            print("[路口中心] 警告：无法计算路口中心，使用默认值 (640, 360)")
+            return (640, 360)  # 默认值（假设1280x720分辨率）
+
     def _map_direction_to_api(self, direction: str) -> str:
         """将内部方向格式转换为后端API格式"""
         mapping = {
@@ -213,31 +248,35 @@ class ViolationDetector:
     def _should_record_violation(self, track_id: int, violation_type: str, timestamp: float, verbose=False) -> bool:
         """
         检查是否应该记录违规（去重逻辑）
-        
+
         同一辆车在冷却时间内，相同类型的违规只记录一次
         不同类型的违规分别记录
-        
+
         Args:
             track_id: 车辆ID
             violation_type: 违规类型 ('red_light_running' 或 'wrong_way_driving')
-            timestamp: 当前时间戳
+            timestamp: 当前时间戳（单位：毫秒 ms）
             verbose: 是否打印详细调试信息
-            
+
         Returns:
             bool: True表示应该记录，False表示在冷却期内，跳过
         """
         key = (track_id, violation_type)
-        
+
         # 检查是否在冷却期内
         if key in self.violation_cooldown:
             last_time = self.violation_cooldown[key]
-            time_diff = timestamp - last_time
+            time_diff = timestamp - last_time  # 单位：毫秒
+            print(f"[去重检查] Track {track_id} {violation_type}: 当前时间={timestamp:.1f}ms, 上次时间={last_time:.1f}ms, 时间差={time_diff:.1f}ms, 冷却期={self.cooldown_period}ms")
             if time_diff < self.cooldown_period:
-                # 还在冷却期内，不记录（仅在verbose模式打印）
-                if verbose:
-                    print(f"[去重] Track {track_id} {violation_type} 在冷却期内 (距上次{time_diff:.1f}秒)")
+                # 还在冷却期内，不记录
+                print(f"[去重-跳过] Track {track_id} {violation_type} 在冷却期内 (距上次{time_diff:.1f}ms < {self.cooldown_period}ms)")
                 return False
-        
+            else:
+                print(f"[去重-通过] Track {track_id} {violation_type} 已超过冷却期 (距上次{time_diff:.1f}ms >= {self.cooldown_period}ms)")
+        else:
+            print(f"[去重-首次] Track {track_id} {violation_type} 首次检测，时间={timestamp:.1f}ms")
+
         # 记录本次违规时间
         self.violation_cooldown[key] = timestamp
         print(f"[记录] Track {track_id} {violation_type} 已记录")
@@ -261,20 +300,57 @@ class ViolationDetector:
         # result < 0: 在外部
         return result >= -tolerance
 
+    def _is_moving_towards_center(self, track_id: int, current_pos):
+        """
+        判断车辆是否正在靠近路口中心
+
+        通过比较当前位置和历史位置到路口中心的距离来判断
+
+        Args:
+            track_id: 车辆ID
+            current_pos: 当前位置 (x, y)
+
+        Returns:
+            bool: True表示正在靠近中心（进入路口），False表示远离中心（离开路口）
+        """
+        trajectory = self.vehicle_trajectories.get(track_id, [])
+        if len(trajectory) < 2:
+            # 轨迹点太少，无法判断，默认认为是进入路口
+            return True
+
+        # 获取前一个位置（至少500ms前的位置，避免短期波动）
+        prev_pos = None
+        current_timestamp = trajectory[-1][2]  # 从轨迹中获取当前时间戳
+        for point in reversed(trajectory[:-1]):  # 排除当前点
+            if current_timestamp - point[2] >= 500:  # 至少500ms前
+                prev_pos = (point[0], point[1])
+                break
+
+        if prev_pos is None:
+            prev_pos = (trajectory[0][0], trajectory[0][1])
+
+        # 计算到路口中心的距离
+        center_x, center_y = self.intersection_center
+        curr_dist = np.sqrt((current_pos[0] - center_x)**2 + (current_pos[1] - center_y)**2)
+        prev_dist = np.sqrt((prev_pos[0] - center_x)**2 + (prev_pos[1] - center_y)**2)
+
+        # 距离在减小 = 靠近中心 = 进入路口
+        return curr_dist < prev_dist
+
     def detect_red_light_violation(self, track_id: int, bbox, frame, timestamp):
         """
         检测闯红灯违规
-        
+
         正确的逻辑：
-        1. 追踪车辆相对于停止线的位置（前方/内部）
-        2. 检测车辆是否在红灯期间从停止线前方穿越到停止线内
-        3. 只有在红灯时穿越才算闯红灯
+        1. 判断车辆是否正在进入停止线（靠近路口中心）
+        2. 检测车辆是否在红灯期间进入停止线
+        3. 只有进入路口方向的停止线才检测，离开路口的不检测
 
         Args:
             track_id: 车辆追踪ID
             bbox: 边界框 (x1, y1, x2, y2)
             frame: 当前帧图像
-            timestamp: 时间戳
+            timestamp: 时间戳（单位：毫秒 ms）
 
         Returns:
             dict or None: 违规记录字典，如果没有违规则返回 None
@@ -301,65 +377,59 @@ class ViolationDetector:
             
             if is_in_stop_line:
                 # 车辆现在在停止线内
-                if status['before'] and not status['crossed']:
-                    # 车辆之前在停止线前方，现在穿越进来了
-                    # 检查当前信号灯状态
-                    if self.traffic_lights.get(direction) == 'red':
-                        # 红灯时穿越 = 闯红灯！
-                        # 检查去重
-                        if not self._should_record_violation(track_id, 'red_light_running', timestamp):
-                            status['crossed'] = True  # 标记已穿越，避免重复检测
-                            return None  # 在冷却期内，跳过
-                        
-                        violation_id = f"RED_{direction}_{track_id}_{int(timestamp)}"
-                        screenshot_path = self.save_violation_screenshot(
-                            frame, bbox, violation_id, "red_light"
-                        )
+                if not status['crossed']:
+                    # 车辆首次进入停止线（之前不在停止线内）
 
-                        violation_record = {
-                            'id': violation_id,
-                            'type': 'red_light_running',
-                            'track_id': track_id,
-                            'direction': direction,
-                            'timestamp': datetime.fromtimestamp(timestamp).isoformat(),
-                            'location': vehicle_center,
-                            'bbox': bbox,
-                            'screenshot': str(screenshot_path)
-                        }
+                    # 关键判断：车辆是否正在靠近路口中心（进入路口）
+                    is_entering = self._is_moving_towards_center(track_id, vehicle_center)
 
-                        self.violations.append(violation_record)
-                        print(f"⚠️ [闯红灯] Track {track_id} @ {direction}")
-                        
-                        # 上报到后端 API
-                        self._report_to_backend(violation_record, frame)
-                        
-                        status['crossed'] = True  # 标记已穿越
-                        return violation_record
+                    if is_entering:
+                        # 车辆正在进入路口，需要检查红绿灯
+                        if self.traffic_lights.get(direction) == 'red':
+                            # 红灯时进入停止线 = 闯红灯！
+                            # 检查去重
+                            if not self._should_record_violation(track_id, 'red_light_running', timestamp):
+                                status['crossed'] = True  # 标记已穿越，避免重复检测
+                                return None  # 在冷却期内，跳过
+
+                            violation_id = f"RED_{direction}_{track_id}_{int(timestamp)}"
+                            screenshot_path = self.save_violation_screenshot(
+                                frame, bbox, violation_id, "red_light"
+                            )
+
+                            violation_record = {
+                                'id': violation_id,
+                                'type': 'red_light_running',
+                                'track_id': track_id,
+                                'direction': direction,
+                                'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
+                                'location': vehicle_center,
+                                'bbox': bbox,
+                                'screenshot': str(screenshot_path)
+                            }
+
+                            self.violations.append(violation_record)
+                            print(f"⚠️ [闯红灯] Track {track_id} @ {direction} (进入路口)")
+
+                            # 上报到后端 API
+                            self._report_to_backend(violation_record, frame)
+
+                            status['crossed'] = True  # 标记已穿越
+                            return violation_record
+                        else:
+                            # 绿灯时进入停止线，正常通行
+                            status['crossed'] = True
                     else:
-                        # 绿灯时穿越，正常通行
+                        # 车辆正在离开路口，不检测（避免误报）
                         status['crossed'] = True
+                        # print(f"[调试] Track {track_id} @ {direction} 正在离开路口，不检测")
                 else:
                     # 车辆持续在停止线内，不做处理
                     pass
             else:
-                # 车辆不在停止线内
-                # 检查车辆是否在停止线前方（通过检查in车道）
-                is_before_stop_line = False
-                for lane_poly in data['lanes'].get('in', []):
-                    if self.is_point_in_polygon(vehicle_center, lane_poly):
-                        is_before_stop_line = True
-                        break
-                
-                if is_before_stop_line:
-                    # 车辆在停止线前方的进入车道
-                    status['before'] = True
-                    status['crossed'] = False  # 重置穿越状态
-                else:
-                    # 车辆既不在停止线也不在进入车道，可能已经离开路口
-                    # 重置状态
-                    if status['crossed']:
-                        status['before'] = False
-                        status['crossed'] = False
+                # 车辆不在停止线内，重置穿越状态
+                # 这样下次进入停止线时可以重新检测
+                status['crossed'] = False
 
         return None
 
@@ -390,8 +460,8 @@ class ViolationDetector:
         if len(trajectory) < 3:
             return None
 
-        # 只保留最近2秒的轨迹
-        trajectory = [p for p in trajectory if timestamp - p[2] <= 2.0]
+        # 只保留最近2秒的轨迹 (timestamp 单位是毫秒)
+        trajectory = [p for p in trajectory if timestamp - p[2] <= 2000.0]
         self.vehicle_trajectories[track_id] = trajectory
 
         if len(trajectory) < 3:
@@ -417,7 +487,7 @@ class ViolationDetector:
         # 检查车辆在哪条车道中（只检查相关方向）
         for direction in directions_to_check:
             data = self.rois[direction]
-            
+
             # 检查in车道（驶入路口）
             for lane_idx, lane_poly in enumerate(data['lanes'].get('in', [])):
                 if self.is_point_in_polygon(current_pos, lane_poly):
@@ -428,14 +498,15 @@ class ViolationDetector:
 
                     if is_wrong:
                         # 检查是否应该记录（去重）
+                        # 注意：这里会更新冷却期时间，即使不记录也要调用，避免同一帧多次检测
                         if not self._should_record_violation(track_id, 'wrong_way_driving', timestamp):
-                            return None  # 在冷却期内，跳过
+                            return None  # 在冷却期内，跳过所有后续检测
                         
                         # 只在要记录违规时打印详细信息
                         print(f"[逆行检测] Track {track_id} @ {direction} in-lane {lane_idx}")
                         print(f"  当前位置: {current_pos}, 起点: {start_point}, 终点: {end_point}")
                         print(f"  移动向量: dy={dy:.1f}, dx={dx:.1f}")
-                        print(f"  轨迹点数: {len(trajectory)}, 时间跨度: {trajectory[-1][2] - trajectory[0][2]:.1f}秒")
+                        print(f"  轨迹点数: {len(trajectory)}, 时间跨度: {trajectory[-1][2] - trajectory[0][2]:.1f}ms")
                         
                         violation_id = f"WRONG_{direction}_{track_id}_{int(timestamp)}"
 
@@ -706,7 +777,7 @@ class ViolationDetector:
                             'track_id': track_id,
                             'solid_line': line_name,
                             'direction': solid_line['direction'],
-                            'timestamp': datetime.fromtimestamp(timestamp).isoformat(),
+                            'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
                             'screenshot': str(screenshot_path),
                             'trajectory': trajectory
                         }
@@ -827,7 +898,7 @@ class ViolationDetector:
             frame: 当前帧图像
             detections: 检测结果列表 [(track_id, bbox), ...]
                        bbox = (x1, y1, x2, y2)
-            timestamp: 时间戳
+            timestamp: 时间戳（单位：毫秒 ms）
 
         Returns:
             list: 本帧检测到的违规列表
@@ -961,7 +1032,7 @@ class ViolationDetector:
                                 'type': 'waiting_area_red_entry',
                                 'track_id': track_id,
                                 'direction': direction,
-                                'timestamp': datetime.fromtimestamp(timestamp).isoformat(),
+                                'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
                                 'location': vehicle_center,
                                 'bbox': bbox,
                                 'screenshot': str(screenshot_path),
@@ -1005,7 +1076,7 @@ class ViolationDetector:
                             'type': 'waiting_area_illegal_exit',
                             'track_id': track_id,
                             'direction': direction,
-                            'timestamp': datetime.fromtimestamp(timestamp).isoformat(),
+                            'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
                             'location': vehicle_center,
                             'bbox': bbox,
                             'screenshot': str(screenshot_path),

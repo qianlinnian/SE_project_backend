@@ -91,7 +91,7 @@ Path(VIOLATIONS_DIR).mkdir(parents=True, exist_ok=True)
 # 任务状态存储
 tasks = {}
 
-# 全局信号灯状态（由外部系统更新）
+# 全局信号灯状态（从 Java 后端获取）
 current_signal_states = {
     'north_bound': 'red',
     'south_bound': 'red',
@@ -105,6 +105,246 @@ current_left_turn_signals = {
     'west_bound': 'red'
 }
 signal_lock = threading.Lock()  # 线程安全锁
+
+# 信号灯同步配置
+SIGNAL_SYNC_INTERVAL = 2  # 从后端获取信号灯状态的间隔（秒）
+backend_signal_fetcher = None  # 后台同步任务
+
+
+# ==================== 信号灯同步功能 ====================
+
+def fetch_signal_states_from_backend():
+    """
+    从 Java 后端获取信号灯状态
+
+    如果 Java 后端不可用，则根据系统时间模拟信号灯状态
+
+    信号灯模拟逻辑（60秒周期）：
+    - 0-20秒: 南北直行绿灯 + 南北左转红灯 + 东西直行红灯 + 东西左转红灯
+    - 20-23秒: 南北黄灯
+    - 23-43秒: 东西直行绿灯 + 东西左转绿灯 + 南北直行红灯 + 南北左转红灯
+    - 43-46秒: 东西黄灯
+    - 46-50秒: 南北左转绿灯
+    - 50-53秒: 南北左转黄灯
+    - 53-60秒: 等待
+
+    转换为 Python 格式:
+    - north_bound: 直行信号
+    - south_bound: 直行信号
+    - east_bound: 直行信号
+    - west_bound: 直行信号
+    """
+    global current_signal_states, current_left_turn_signals
+
+    try:
+        # 尝试调用 Java 后端获取信号灯状态
+        url = f"{BACKEND_BASE_URL}/multi-direction-traffic/intersections/1/status"
+        response = requests.get(url, timeout=3)
+
+        if response.status_code == 200:
+            # Java 后端可用，从 Java 获取
+            data = response.json()
+
+            # 方向映射
+            direction_map = {
+                'NORTH': 'north_bound',
+                'SOUTH': 'south_bound',
+                'EAST': 'east_bound',
+                'WEST': 'west_bound'
+            }
+
+            new_states = {}
+            new_left_turns = {}
+            state_changed = False
+
+            for java_dir, py_dir in direction_map.items():
+                if java_dir in data:
+                    state_data = data[java_dir]
+
+                    straight_phase = state_data.get('straightPhase', 'RED')
+                    left_turn_phase = state_data.get('leftTurnPhase', 'RED')
+
+                    new_straight = straight_phase.lower() if straight_phase else 'red'
+                    new_left = left_turn_phase.lower() if left_turn_phase else 'red'
+
+                    if current_signal_states.get(py_dir, '') != new_straight:
+                        state_changed = True
+                    if current_left_turn_signals.get(py_dir, '') != new_left:
+                        state_changed = True
+
+                    new_states[py_dir] = new_straight
+                    new_left_turns[py_dir] = new_left
+
+            if new_states:
+                with signal_lock:
+                    current_signal_states.update(new_states)
+                    current_left_turn_signals.update(new_left_turns)
+
+                if state_changed:
+                    print(f"[信号同步] 从 Java 后端获取")
+                    for direction, state in new_states.items():
+                        emoji = "🟢" if state == "green" else "🔴" if state == "red" else "🟡"
+                        print(f"  {emoji} {direction}: {state}")
+                    socketio.emit('traffic', convert_to_serializable(current_signal_states.copy()))
+
+            return True
+
+    except:
+        # Java 后端不可用，使用时间模拟
+        pass
+
+    # 使用系统时间模拟信号灯状态
+    now = datetime.now()
+    seconds_of_minute = now.second + now.microsecond / 1_000_000  # 精确到毫秒
+    total_seconds = now.minute * 60 + seconds_of_minute
+
+    # 信号灯周期：60秒
+    cycle_position = total_seconds % 60
+
+    # 根据周期位置计算各方向状态
+    new_states = {}
+    new_left_turns = {}
+
+    if cycle_position < 20:
+        # 0-20秒: 南北绿灯
+        new_states = {
+            'north_bound': 'green',
+            'south_bound': 'green',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+        new_left_turns = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+    elif cycle_position < 23:
+        # 20-23秒: 南北黄灯
+        new_states = {
+            'north_bound': 'yellow',
+            'south_bound': 'yellow',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+        new_left_turns = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+    elif cycle_position < 43:
+        # 23-43秒: 东西绿灯
+        new_states = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'green',
+            'west_bound': 'green'
+        }
+        new_left_turns = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'green',
+            'west_bound': 'green'
+        }
+    elif cycle_position < 46:
+        # 43-46秒: 东西黄灯
+        new_states = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'yellow',
+            'west_bound': 'yellow'
+        }
+        new_left_turns = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'yellow',
+            'west_bound': 'yellow'
+        }
+    elif cycle_position < 50:
+        # 46-50秒: 南北左转绿灯
+        new_states = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+        new_left_turns = {
+            'north_bound': 'green',
+            'south_bound': 'green',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+    elif cycle_position < 53:
+        # 50-53秒: 南北左转黄灯
+        new_states = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+        new_left_turns = {
+            'north_bound': 'yellow',
+            'south_bound': 'yellow',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+    else:
+        # 53-60秒: 全红等待
+        new_states = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+        new_left_turns = {
+            'north_bound': 'red',
+            'south_bound': 'red',
+            'east_bound': 'red',
+            'west_bound': 'red'
+        }
+
+    # 检查状态是否变化
+    state_changed = False
+    for direction in new_states:
+        if current_signal_states.get(direction) != new_states[direction]:
+            state_changed = True
+            break
+
+    if state_changed:
+        with signal_lock:
+            current_signal_states.update(new_states)
+            current_left_turn_signals.update(new_left_turns)
+
+        print(f"[信号模拟] {now.strftime('%H:%M:%S')} (周期位置: {cycle_position:.1f}秒)")
+        for direction, state in new_states.items():
+            emoji = "🟢" if state == "green" else "🔴" if state == "red" else "🟡"
+            print(f"  {emoji} {direction}: 直行={state} | 左转={new_left_turns[direction]}")
+
+        # 广播给前端
+        socketio.emit('traffic', convert_to_serializable(current_signal_states.copy()))
+
+    return True
+
+
+def start_signal_sync_task():
+    """启动后台信号灯同步任务"""
+    global backend_signal_fetcher
+
+    def sync_loop():
+        """同步循环"""
+        while True:
+            try:
+                fetch_signal_states_from_backend()
+            except Exception as e:
+                print(f"[信号同步] 异常: {e}")
+
+            time.sleep(SIGNAL_SYNC_INTERVAL)
+
+    # 启动后台线程
+    backend_signal_fetcher = threading.Thread(target=sync_loop, daemon=True)
+    backend_signal_fetcher.start()
+    print(f"[信号同步] 已启动，每 {SIGNAL_SYNC_INTERVAL} 秒同步一次")
 
 
 # ==================== HTTP API ====================
@@ -139,86 +379,67 @@ def get_screenshot(filename):
 @app.route('/api/traffic', methods=['POST'])
 def receive_traffic_signal():
     """
-    接收外部系统的信号灯数据
-    
-    支持两种格式:
-    
-    格式1 - JSON列表:
-    [
-        {"路口": 0, "信号": "ETWT", "排队车辆": 4},
-        {"路口": 1, "信号": "NTST", "排队车辆": 0},
-        ...
-    ]
-    
-    格式2 - 文本格式:
+    手动设置信号灯状态（测试用）
+
+    注意：正常情况下信号灯状态由后台线程自动从 Java 后端同步，
+    此接口仅用于测试或手动覆盖。
+
+    请求体格式:
     {
-        "data": "路口0: 信号=ETWT, 排队车辆=4\n路口1: 信号=NTST, 排队车辆=0\n..."
+        "north_bound": "red",
+        "south_bound": "green",
+        ...
     }
-    
-    信号代码说明:
-    - ETWT = 东西直行绿灯
-    - NTST = 南北直行绿灯
-    - ELWL = 东西左转绿灯
-    - NLSL = 南北左转绿灯
     """
     global current_signal_states, current_left_turn_signals
-    
+
     try:
         data = request.json
-        
-        # 解析信号灯数据
-        if isinstance(data, list):
-            # 格式1: JSON 列表
-            signal_states = SignalAdapter.convert_backend_to_system(data)
-        elif isinstance(data, dict) and 'data' in data:
-            # 格式2: 文本格式
-            signal_states = SignalAdapter.convert_backend_string_format(data['data'])
-        elif isinstance(data, dict):
-            # 格式3: 直接传入路口数据列表
-            junction_list = []
-            for key, value in data.items():
-                if key.startswith('路口') or key.startswith('junction'):
-                    if isinstance(value, dict):
-                        junction_list.append(value)
-            if junction_list:
-                signal_states = SignalAdapter.convert_backend_to_system(junction_list)
-            else:
-                # 尝试解析为文本
-                text_data = str(data)
-                signal_states = SignalAdapter.convert_backend_string_format(text_data)
-        else:
+
+        if not isinstance(data, dict):
             return jsonify({
                 "success": False,
-                "message": "不支持的数据格式"
+                "message": "请求体必须是 JSON 对象"
             }), 400
-        
-        # 更新全局信号灯状态（线程安全）
+
+        # 解析并更新信号灯状态
+        signal_states = {}
+        for direction in ['north_bound', 'south_bound', 'east_bound', 'west_bound']:
+            if direction in data:
+                state = data[direction].lower()
+                if state in ['red', 'green', 'yellow']:
+                    signal_states[direction] = state
+
+        if not signal_states:
+            return jsonify({
+                "success": False,
+                "message": "没有有效的信号灯状态数据"
+            }), 400
+
+        # 更新全局状态（线程安全）
         with signal_lock:
             current_signal_states.update(signal_states)
-        
-        # 打印信号灯状态变化
-        print(f"\n[信号灯更新] {datetime.now().strftime('%H:%M:%S')}")
+
+        # 打印状态变化
+        print(f"\n[信号灯手动设置] {datetime.now().strftime('%H:%M:%S')}")
         for direction, state in signal_states.items():
-            emoji = "🟢" if state == "green" else "🔴"
+            emoji = "🟢" if state == "green" else "🔴" if state == "red" else "🟡"
             print(f"  {emoji} {direction}: {state}")
-        
-        # 广播信号灯状态给所有 WebSocket 客户端
-        socketio.emit('signal_update', convert_to_serializable({
-            'timestamp': datetime.now().isoformat(),
-            'signals': signal_states
-        }))
-        
+
+        # 广播给前端
+        socketio.emit('traffic', convert_to_serializable(current_signal_states.copy()))
+
         return jsonify({
             "success": True,
-            "message": "信号灯状态已更新",
+            "message": "信号灯状态已更新（手动设置）",
             "signals": signal_states
         })
-        
+
     except Exception as e:
         traceback.print_exc()
         return jsonify({
             "success": False,
-            "message": f"解析信号灯数据失败: {str(e)}"
+            "message": f"设置失败: {str(e)}"
         }), 500
 
 
@@ -458,7 +679,11 @@ def test_with_local_video():
 def handle_connect():
     """客户端连接"""
     print(f"[WebSocket] 客户端连接: {request.sid}")
+    # 发送连接成功消息
     emit('connected', {'message': 'Connected to AI Realtime Service'})
+    # 发送当前信号灯状态给新连接的客户端
+    with signal_lock:
+        emit('traffic', convert_to_serializable(current_signal_states.copy()))
 
 
 @socketio.on('disconnect')
