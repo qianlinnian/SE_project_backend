@@ -228,7 +228,7 @@ def fetch_signal_states_from_backend():
                             left = new_left_turns[direction]
                             straight_emoji = "🟢" if straight == "green" else "🔴" if straight == "red" else "🟡"
                             left_emoji = "🟢" if left == "green" else "🔴" if left == "red" else "🟡"
-                            print(f"  {straight_emoji} {direction}: 直行={straight} | 左转={left}")
+                            print(f" {direction}: 直行={straight} {straight_emoji} | 左转={left} {left_emoji}")
                         socketio.emit('traffic', {
                             'signals': convert_to_serializable(current_signal_states.copy()),
                             'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy())
@@ -1645,11 +1645,11 @@ if __name__ == '__main__':
     print("📡 API 端点 - 视频流检测:")
     print(f"   POST /start-realtime   - 启动实时处理任务")
     print(f"   POST /test-local       - 本地视频测试")
-    print(f"   POST /api/traffic      - 接收信号灯数据 ⭐")
+    print(f"   POST /api/traffic      - 接收信号灯数据")
     print(f"   GET  /api/traffic/status - 获取当前信号灯状态")
     print("=" * 60)
     print("📡 API 端点 - 图片检测 (新增):")
-    print(f"   POST /detect-image         - 检测单张图片文件 ⭐")
+    print(f"   POST /detect-image         - 检测单张图片文件")
     print(f"   POST /detect-image-base64  - 检测Base64图片")
     print(f"   POST /detect-batch         - 批量检测多张图片")
     print("=" * 60)

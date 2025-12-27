@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# 构建产物
+target/
+build/
+dist/
+*.jar
+*.war
+
+# 日志
+logs/
+*.log
+
+# 数据文件
+mysql/data/
+redis/data/
+minio/data/
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 环境变量
+.env.local
+.env.*.local
+
+# 文档
+*.md
+!README.md
+docs/
+
+# 测试
+coverage/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db

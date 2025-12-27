@@ -104,7 +104,8 @@ public class MultiDirectionTrafficLightService {
             case LEFT_TURN:
                 return cachedState.leftTurnPhase;
             case RIGHT_TURN:
-                return cachedState.rightTurnPhase;
+                // 右转信号灯已废弃，固定返回RED（表示禁止右转或需要遵守直行信号）
+                return IntersectionDirection.LightPhase.RED;
             case U_TURN:
                 return cachedState.leftTurnPhase; // 掉头通常跟随左转信号
             default:
@@ -169,25 +170,9 @@ public class MultiDirectionTrafficLightService {
             leftTurnRemaining = leftTurnCycle - leftTurnPosition;
         }
 
-        // 右转信号灯计算（类似左转）
-        int rightTurnCycle = config.getRightTurnRedDuration() +
-                config.getRightTurnYellowDuration() +
-                config.getRightTurnGreenDuration();
-        int rightTurnPosition = (secondsOfDay + config.getStraightGreenDuration() * 2) % rightTurnCycle;
-
-        IntersectionDirection.LightPhase rightTurnPhase;
-        int rightTurnRemaining;
-        if (rightTurnPosition < config.getRightTurnRedDuration()) {
-            rightTurnPhase = IntersectionDirection.LightPhase.RED;
-            rightTurnRemaining = config.getRightTurnRedDuration() - rightTurnPosition;
-        } else if (rightTurnPosition < config.getRightTurnRedDuration() + config.getRightTurnGreenDuration()) {
-            rightTurnPhase = IntersectionDirection.LightPhase.GREEN;
-            rightTurnRemaining = config.getRightTurnRedDuration() + config.getRightTurnGreenDuration()
-                    - rightTurnPosition;
-        } else {
-            rightTurnPhase = IntersectionDirection.LightPhase.YELLOW;
-            rightTurnRemaining = rightTurnCycle - rightTurnPosition;
-        }
+        // 右转信号灯已废弃，固定返回RED和0剩余时间
+        IntersectionDirection.LightPhase rightTurnPhase = IntersectionDirection.LightPhase.RED;
+        int rightTurnRemaining = 0;
 
         return new DirectionLightState(straightPhase, leftTurnPhase, rightTurnPhase,
                 straightRemaining, leftTurnRemaining, rightTurnRemaining);
@@ -294,6 +279,7 @@ public class MultiDirectionTrafficLightService {
         // 默认其他转弯类型为红灯，只有指定的转弯类型设置为指定状态
         IntersectionDirection.LightPhase straightPhase = IntersectionDirection.LightPhase.RED;
         IntersectionDirection.LightPhase leftTurnPhase = IntersectionDirection.LightPhase.RED;
+        // 右转信号灯已废弃，固定为RED
         IntersectionDirection.LightPhase rightTurnPhase = IntersectionDirection.LightPhase.RED;
 
         switch (turnType) {
@@ -305,12 +291,12 @@ public class MultiDirectionTrafficLightService {
                 leftTurnPhase = lightPhase;
                 break;
             case RIGHT_TURN:
-                rightTurnPhase = lightPhase;
+                // 右转信号灯已废弃，不设置
                 break;
         }
 
         return new DirectionLightState(straightPhase, leftTurnPhase, rightTurnPhase,
-                durationSeconds, durationSeconds, durationSeconds);
+                durationSeconds, durationSeconds, 0);  // 右转剩余时间固定为0
     }
 
     /**

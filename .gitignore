@@ -59,6 +59,8 @@ Desktop.ini
 *.json
 yolov8s.pt
 yolov8m.pt
+
+# 保留特定的 JSON 文件 检测区域的标定
 !rois2.json
 !rois.json
 # ==================== Frontend (不上传到 Git) ====================

@@ -1,6 +1,10 @@
 version: '3.8'
 
 services:
+  # ============================================
+  # 基础设施服务
+  # ============================================
+
   # MySQL 8.0 - 核心业务数据库
   traffic-db:
     image: mysql:8.0
@@ -87,9 +91,100 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ============================================
+  # 应用服务
+  # ============================================
+
+  # Python AI 检测服务
+  ai-service:
+    build:
+      context: .
+      dockerfile: ai_detection/Dockerfile
+    image: traffic-mind-ai:latest
+    container_name: traffic_ai
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      # 文件上传共享目录
+      - ./uploads:/app/uploads
+      # AI检测数据目录
+      - ./ai_detection/data:/app/data
+      # 日志目录
+      - ./logs/ai:/app/logs
+    networks:
+      - traffic-network
     depends_on:
-      - redis
+      traffic-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # 后端API地址（容器内网络）
+      - BACKEND_API_URL=http://backend:8081/api
+      - BACKEND_BASE_URL=http://backend:8081/api
+      # 路口ID
+      - INTERSECTION_ID=1
+      # Python 配置
+      - PYTHONUNBUFFERED=1
+
+  # Java Spring Boot 后端服务
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: traffic-mind-backend:latest
+    container_name: traffic_backend
+    restart: always
+    ports:
+      - "8081:8081"
+    volumes:
+      # 文件上传共享目录
+      - ./uploads:/app/uploads
+      # 日志目录
+      - ./logs/backend:/app/logs
+    networks:
+      - traffic-network
+    depends_on:
+      traffic-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # 数据库配置
+      - SPRING_DATASOURCE_URL=jdbc:mysql://traffic-db:3306/${MYSQL_DATABASE}?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
+
+      # Redis 配置
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PORT=6379
+
+      # JWT 配置
+      - JWT_SECRET=${JWT_SECRET:-TrafficMindSecretKeyForJWTTokenGenerationAndValidation2024_MakeItLongerThan512BitsForHS512SecurityStandard}
+
+      # AI 服务配置
+      - AI_SERVICE_BASE_URL=http://ai-service:5000
+
+      # 文件存储配置
+      - FILE_UPLOAD_BASE_PATH=/app/uploads
+      - FILE_URL_BASE_URL=http://localhost:8081/api/files
+
+      # JVM 配置
+      - JAVA_OPTS=-Xms512m -Xmx2g -XX:+UseG1GC
+
+      # Spring Profile
+      - SPRING_PROFILES_ACTIVE=prod
 
 networks:
   traffic-network:
     driver: bridge
+
+# ============================================
+# 数据卷（可选，如果使用命名卷）
+# ============================================
+volumes:
+  mysql-data:
+  redis-data:
+  minio-data:
