@@ -20,7 +20,8 @@ class ViolationDetector:
     """违规检测器（带后端API集成）"""
 
     def __init__(self, rois_path: str, screenshot_dir: str = "./violations",
-                 intersection_id: int = 1, enable_api: bool = True):
+                 intersection_id: int = 1, enable_api: bool = True,
+                 backend_username: str = "police001", backend_password: str = "password123"):
         """
         初始化违规检测器
 
@@ -29,6 +30,8 @@ class ViolationDetector:
             screenshot_dir: 违规截图保存目录
             intersection_id: 路口ID（用于API上报）
             enable_api: 是否启用API上报
+            backend_username: 后端认证用户名
+            backend_password: 后端认证密码
         """
         # 加载ROI数据
         with open(rois_path, 'r', encoding='utf-8') as f:
@@ -89,11 +92,16 @@ class ViolationDetector:
         self.intersection_id = intersection_id
         self.enable_api = enable_api
         self.api_client = None
+        self.backend_username = backend_username
+        self.backend_password = backend_password
 
         if enable_api:
             try:
                 from backend_api_client import BackendAPIClient
-                self.api_client = BackendAPIClient()
+                self.api_client = BackendAPIClient(
+                    username=backend_username,
+                    password=backend_password
+                )
                 # 测试连接
                 if self.api_client.health_check():
                     print("[API] 后端连接成功，违规将自动上报到 http://localhost:8081")
@@ -164,32 +172,51 @@ class ViolationDetector:
 
     def _report_to_backend(self, violation_record: dict, frame=None):
         """
-        上报违规到后端API
-        
+        上报违规到后端API（异步执行，不阻塞主线程）
+
         Args:
             violation_record: 本地违规记录字典
             frame: 当前帧（可选）
         """
         if not self.enable_api or self.api_client is None:
             return
-        
+
+        # 创建违规记录的副本，避免线程间共享问题
+        violation_copy = violation_record.copy()
+
+        # 在后台线程中执行上报
+        import threading
+        thread = threading.Thread(
+            target=self._do_backend_report,
+            args=(violation_copy,),
+            daemon=True
+        )
+        thread.start()
+
+    def _do_backend_report(self, violation_record: dict):
+        """
+        实际执行后端上报的内部方法（在后台线程中运行）
+
+        Args:
+            violation_record: 本地违规记录字典
+        """
         try:
             # 获取截图路径
             screenshot_path = violation_record.get('screenshot', '')
-            
+
             # 上传图片（当前返回本地路径）
             image_url = self.api_client.upload_image(screenshot_path) if screenshot_path else 'file:///no_image.jpg'
-            
+
             # 转换时间戳
             timestamp_str = violation_record.get('timestamp', datetime.now().isoformat())
-            
+
             # 获取方向
             direction = violation_record.get('direction', 'north_bound')
-            
+
             # 生成临时车牌号（基于 track_id）
             track_id = violation_record.get('track_id', 0)
             plate_number = f"未识别_{track_id}"
-            
+
             # 准备 API 数据
             api_data = {
                 'intersectionId': self.intersection_id,
@@ -201,18 +228,18 @@ class ViolationDetector:
                 'aiConfidence': 0.95,
                 'occurredAt': timestamp_str
             }
-            
+
             # 调用 API 上报
             violation_id = self.api_client.report_violation(api_data)
-            
+
             if violation_id:
                 violation_record['backend_id'] = violation_id
-                print(f"[API] 上报成功! 后端ID: {violation_id}")
+                print(f"[API] ✅ 上报成功! 后端ID: {violation_id}")
             else:
-                print(f"[API] 上报失败")
-                
+                print(f"[API] ❌ 上报失败")
+
         except Exception as e:
-            print(f"[API] 上报异常: {type(e).__name__}: {e}")
+            print(f"[API] ⚠️  上报异常: {type(e).__name__}: {e}")
 
     def update_signal_state(self, direction: str, state: str, force_print=False):
         """
@@ -267,10 +294,10 @@ class ViolationDetector:
         if key in self.violation_cooldown:
             last_time = self.violation_cooldown[key]
             time_diff = timestamp - last_time  # 单位：毫秒
-            print(f"[去重检查] Track {track_id} {violation_type}: 当前时间={timestamp:.1f}ms, 上次时间={last_time:.1f}ms, 时间差={time_diff:.1f}ms, 冷却期={self.cooldown_period}ms")
+            # print(f"[去重检查] Track {track_id} {violation_type}: 当前时间={timestamp:.1f}ms, 上次时间={last_time:.1f}ms, 时间差={time_diff:.1f}ms, 冷却期={self.cooldown_period}ms")
             if time_diff < self.cooldown_period:
                 # 还在冷却期内，不记录
-                print(f"[去重-跳过] Track {track_id} {violation_type} 在冷却期内 (距上次{time_diff:.1f}ms < {self.cooldown_period}ms)")
+                # print(f"[去重-跳过] Track {track_id} {violation_type} 在冷却期内 (距上次{time_diff:.1f}ms < {self.cooldown_period}ms)")
                 return False
             else:
                 print(f"[去重-通过] Track {track_id} {violation_type} 已超过冷却期 (距上次{time_diff:.1f}ms >= {self.cooldown_period}ms)")

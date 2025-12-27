@@ -208,7 +208,7 @@ class TrafficViolationPipeline:
         y_offset = 30
         for i, (direction, state) in enumerate(signal_states.items()):
             color = (0, 255, 0) if state == 'green' else (0, 0, 255)
-            text = f"{direction}: {state.upper()}"
+            text = f"{direction}: {state.uppzer()}"
             cv2.putText(
                 frame, text, (10, y_offset + i * 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2

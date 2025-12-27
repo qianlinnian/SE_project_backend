@@ -1,5 +1,5 @@
 /**
- * 🚀 AI 交通检测 - 快速入门示例
+ * eastAI 交通检测 - 快速入门示例
  *
  * 这是一个最简化的示例，适合前端开发者快速理解如何使用 AI 检测 API
  *
@@ -47,7 +47,7 @@ export const SimpleImageDetector = () => {
       console.log('🔍 检测结果:', data);
       console.log('📸 是否有标注图片:', !!data.annotated_image);
       if (data.annotated_image) {
-        console.log('✅ 标注图片长度:', data.annotated_image.length);
+        console.log('east标注图片长度:', data.annotated_image.length);
       }
       setResult(data);
     } catch (error) {
@@ -174,6 +174,8 @@ import { useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 export const SimpleRealtimeMonitor = () => {
+  const API_BASE = 'http://localhost:5000';
+
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
   const [currentFrame, setCurrentFrame] = useState<string>('');
@@ -212,127 +214,31 @@ export const SimpleRealtimeMonitor = () => {
     east_bound: 'red'
   });
 
-  // 信号灯自动循环控制
-  const [autoSignal, setAutoSignal] = useState(false);
-  const [signalPhase, setSignalPhase] = useState(0);
+  // 信号灯数据源模式 ('simulation' = Java后端, 'circle' = 自动循环)
+  const [signalSourceMode, setSignalSourceMode] = useState<'backend' | 'simulation'>('backend');
 
-  // 自动信号灯循环逻辑（7个相位，每个10秒）
-  useEffect(() => {
-    if (!autoSignal) return;
+  // 切换信号灯数据源
+  const toggleSignalSource = async () => {
+    const newMode = signalSourceMode === 'backend' ? 'simulation' : 'backend';
 
-    const interval = setInterval(() => {
-      setSignalPhase((prev) => (prev + 1) % 7);
-    }, 10000); // 每10秒切换一次
+    try {
+      const response = await fetch(`${API_BASE}/api/traffic/signal-source-mode`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mode: newMode })
+      });
 
-    return () => clearInterval(interval);
-  }, [autoSignal]);
-
-  // 根据相位更新信号灯状态（包括直行灯和左转灯）
-  // 模拟真实的7相位信号灯系统（每相位10秒，总周期70秒）
-  useEffect(() => {
-    if (!autoSignal) return;
-
-    switch (signalPhase) {
-      case 0: // 相位1: 南北直行绿灯
-        setSignalLights({
-          north_bound: 'green',
-          south_bound: 'green',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        setLeftTurnLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        break;
-      case 1: // 相位2: 南北黄灯
-        setSignalLights({
-          north_bound: 'yellow',
-          south_bound: 'yellow',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        setLeftTurnLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        break;
-      case 2: // 相位3: 东西直行绿灯 + 东西左转绿灯
-        setSignalLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'green',
-          east_bound: 'green'
-        });
-        setLeftTurnLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'green',
-          east_bound: 'green'
-        });
-        break;
-      case 3: // 相位4: 东西黄灯，左转灯也变黄
-        setSignalLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'yellow',
-          east_bound: 'yellow'
-        });
-        setLeftTurnLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'yellow',
-          east_bound: 'yellow'
-        });
-        break;
-      case 4: // 相位5: 南北左转绿灯（直行红灯）
-        setSignalLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        setLeftTurnLights({
-          north_bound: 'green',
-          south_bound: 'green',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        break;
-      case 5: // 相位6: 南北左转黄灯
-        setSignalLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        setLeftTurnLights({
-          north_bound: 'yellow',
-          south_bound: 'yellow',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        break;
-      case 6: // 相位7: 全红等待（安全间隔）
-        setSignalLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        setLeftTurnLights({
-          north_bound: 'red',
-          south_bound: 'red',
-          west_bound: 'red',
-          east_bound: 'red'
-        });
-        break;
+      const data = await response.json();
+      if (data.success) {
+        setSignalSourceMode(newMode);
+        console.log(`信号灯数据源已切换到: ${newMode}`);
+      }
+    } catch (error) {
+      console.error('切换信号源失败:', error);
     }
-  }, [signalPhase, autoSignal]);
+  };
 
   // 处理视频上传和启动任务
   const handleStartDetection = async () => {
@@ -361,7 +267,7 @@ export const SimpleRealtimeMonitor = () => {
         const data = await response.json();
         setTaskId(newTaskId);
         setTaskStarted(true);
-        console.log('✅ 任务已启动:', data);
+        console.log('east任务已启动:', data);
 
         // 启动任务后连接 WebSocket
         connectWebSocket(newTaskId);
@@ -384,7 +290,7 @@ export const SimpleRealtimeMonitor = () => {
 
     // 监听连接成功
     newSocket.on('connect', () => {
-      console.log('✅ WebSocket 已连接');
+      console.log('eastWebSocket 已连接');
       setConnected(true);
       newSocket.emit('subscribe', { taskId });
     });
@@ -433,9 +339,8 @@ export const SimpleRealtimeMonitor = () => {
     });
 
     // 任务完成
-    newSocket.on('complete', () => {
-      console.log('✅ 视频处理完成');
-      alert('视频处理完成！');
+    newSocket.on('complete', () => { 
+      console.log('视频处理完成！');
     });
 
     setSocket(newSocket);
@@ -472,7 +377,7 @@ export const SimpleRealtimeMonitor = () => {
 
           {videoFile && (
             <div style={{ marginTop: '10px', color: '#666' }}>
-              <p>✅ 已选择: {videoFile.name}</p>
+              <p>east已选择: {videoFile.name}</p>
               <p>大小: {(videoFile.size / 1024 / 1024).toFixed(2)} MB</p>
             </div>
           )}
@@ -491,7 +396,7 @@ export const SimpleRealtimeMonitor = () => {
               fontSize: '16px'
             }}
           >
-            {uploading ? '上传中...' : '🚀 开始检测'}
+            {uploading ? '上传中...' : 'east开始检测'}
           </button>
         </div>
       )}
@@ -508,7 +413,7 @@ export const SimpleRealtimeMonitor = () => {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <span>{connected ? '✅ 已连接' : '⏳ 连接中...'}</span>
+          <span>{connected ? 'east已连接' : '⏳ 连接中...'}</span>
           {uploadProgress > 0 && (
             <span>处理进度: {uploadProgress.toFixed(1)}%</span>
           )}
@@ -520,10 +425,10 @@ export const SimpleRealtimeMonitor = () => {
       <div style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '10px' }}>
           <button
-            onClick={() => setAutoSignal(!autoSignal)}
+            onClick={toggleSignalSource}
             style={{
               padding: '8px 16px',
-              background: autoSignal ? '#ff9800' : '#4caf50',
+              background: signalSourceMode === 'backend' ? '#2196f3' : '#ff9800',
               color: 'white',
               border: 'none',
               borderRadius: '5px',
@@ -532,13 +437,11 @@ export const SimpleRealtimeMonitor = () => {
               fontWeight: 'bold'
             }}
           >
-            {autoSignal ? '⏸ 停止自动循环' : '▶ 启动自动循环'}
+            {signalSourceMode === 'backend' ? '🌐 Java后端数据' : '🔄 自动循环模拟'}
           </button>
-          {autoSignal && (
-            <span style={{ fontSize: '12px', color: '#666' }}>
-              🔄 信号灯每10秒自动切换 (相位 {signalPhase + 1}/7)
-            </span>
-          )}
+          <span style={{ fontSize: '12px', color: '#666' }}>
+            当前数据源: {signalSourceMode === 'backend' ? 'Java后端' : '自动循环模拟'}
+          </span>
         </div>
         <SignalLightsPanel signalLights={signalLights} leftTurnLights={leftTurnLights} />
       </div>
@@ -658,11 +561,11 @@ export const APIExamples = () => {
     console.log('任务已启动:', data);
   };
 
-  // 示例: 获取信号灯状态
+  // 示例: 获取信号灯数据源模式
   const getSignalStatus = async () => {
-    const response = await fetch(`${API_BASE}/signal-status/1`);
+    const response = await fetch(`${API_BASE}/api/traffic/signal-source-mode`);
     const data = await response.json();
-    console.log('信号灯状态:', data);
+    console.log('信号灯数据源模式:', data);
   };
 
   return (

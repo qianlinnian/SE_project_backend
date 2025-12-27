@@ -53,5 +53,19 @@ public class UserInitializationService {
             userRepository.save(police);
             log.info("创建测试交警用户: police01 / police123");
         }
+
+        // 创建AI检测服务账号
+        if (userRepository.findByUsername("ai-detection-service").isEmpty()) {
+            User aiService = new User();
+            aiService.setUsername("ai-detection-service");
+            aiService.setPasswordHash(passwordEncoder.encode("ai_service_2025"));
+            aiService.setFullName("AI检测服务");
+            aiService.setPoliceNumber("AI-SVC-001");
+            aiService.setRole(User.UserRole.ADMIN);  // 使用ADMIN角色以确保有足够权限
+            aiService.setStatus(User.UserStatus.ACTIVE);
+
+            userRepository.save(aiService);
+            log.info("创建AI检测服务账号: ai-detection-service / ai_service_2025");
+        }
     }
 }

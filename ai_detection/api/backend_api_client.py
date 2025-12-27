@@ -11,19 +11,63 @@ from datetime import datetime
 class BackendAPIClient:
     """后端API客户端"""
 
-    def __init__(self, base_url: str = "http://localhost:8081/api"):
+    def __init__(self, base_url: str = "http://localhost:8081/api", username: str = "police001", password: str = "password123"):
         """
         初始化API客户端
 
         Args:
             base_url: 后端API基础URL，默认为本地开发环境
+            username: 登录用户名，默认为 police001
+            password: 登录密码，默认为 password123
         """
         self.base_url = base_url
+        self.username = username
+        self.password = password
+        self.jwt_token = None
+
         self.session = requests.Session()
         self.session.headers.update({
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         })
+
+        # 初始化时自动登录获取 JWT token
+        self._login()
+
+    def _login(self):
+        """
+        登录获取 JWT token
+        """
+        try:
+            url = f"{self.base_url}/auth/login"
+            login_data = {
+                "username": self.username,
+                "password": self.password
+            }
+            response = requests.post(url, json=login_data, timeout=5)
+
+            if response.status_code == 200:
+                result = response.json()
+                # Java后端返回的字段名是 'accessToken'，不是 'token'
+                self.jwt_token = result.get('data', {}).get('accessToken')
+                if self.jwt_token:
+                    # 更新 session header，添加 Authorization
+                    self.session.headers.update({
+                        'Authorization': f'Bearer {self.jwt_token}'
+                    })
+                    print(f"[API] ✅ JWT 认证成功，用户: {self.username}")
+                else:
+                    print(f"[API] ❌ 登录响应中未找到 token")
+                    print(f"[API] 响应内容: {result}")
+            else:
+                print(f"[API] ❌ 登录失败 HTTP {response.status_code}")
+                try:
+                    print(f"[API] 错误详情: {response.json()}")
+                except:
+                    print(f"[API] 错误详情: {response.text}")
+
+        except Exception as e:
+            print(f"[API] 登录异常: {type(e).__name__}: {e}")
 
     def report_violation(self, violation_data: Dict) -> Optional[int]:
         """
@@ -45,18 +89,25 @@ class BackendAPIClient:
         """
         url = f"{self.base_url}/violations/report"
         try:
-            response = self.session.post(url, json=violation_data, timeout=10)
+            response = self.session.post(url, json=violation_data, timeout=3)
 
             if response.status_code == 200:
                 result = response.json()
-                if result.get('code') == 200:
+                # Java后端的违规上报接口直接返回 {'id': xxx, 'message': '...'}
+                # 不是标准的 {'code': 200, 'data': {...}} 格式
+                if 'id' in result:
+                    violation_id = result.get('id')
+                    print(f"[API] ✅ 上报成功! 后端ID: {violation_id}")
+                    return violation_id
+                # 兼容准格式（如果后端改了格式）
+                elif result.get('code') == 200:
                     violation_id = result.get('data', {}).get('id')
-                    print(f"[API成功] 上报违章成功, ID: {violation_id}")
+                    #print(f"[API] ✅ 上报成功! 后端ID: {violation_id}")
                     return violation_id
                 else:
-                    print(f"[API错误] 响应码: {result.get('code')}, 消息: {result.get('message')}")
+                    print(f"[API] ❌ 上报失败: {result.get('message')}")
             else:
-                print(f"[API错误] HTTP状态码: {response.status_code}, 响应: {response.text}")
+                print(f"[API] ❌ HTTP {response.status_code}: {response.text}")
 
         except requests.exceptions.Timeout:
             print(f"[API超时] 上报违章请求超时")
@@ -184,7 +235,11 @@ class BackendAPIClient:
             with open(image_path, 'rb') as f:
                 files = {'file': (os.path.basename(image_path), f, 'image/jpeg')}
                 data = {'type': 'violation'}
-                response = self.session.post(url, files=files, data=data, timeout=10)
+                # 只保留 Authorization header，让 requests 自动设置 Content-Type 为 multipart/form-data
+                headers = {
+                    'Authorization': f'Bearer {self.jwt_token}'
+                }
+                response = requests.post(url, files=files, data=data, headers=headers, timeout=5)
 
             if response.status_code == 200:
                 result = response.json()
@@ -196,6 +251,11 @@ class BackendAPIClient:
                     print(f"[API]  图片上传失败: {result.get('message')}")
             else:
                 print(f"[API]  图片上传失败 HTTP {response.status_code}")
+                try:
+                    error_detail = response.json()
+                    print(f"[API]  错误详情: {error_detail}")
+                except:
+                    print(f"[API]  错误详情: {response.text}")
 
         except Exception as e:
             print(f"[API]  图片上传异常: {type(e).__name__}: {e}")

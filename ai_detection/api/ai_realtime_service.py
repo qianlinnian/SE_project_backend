@@ -11,7 +11,7 @@ AI 实时检测服务 - TrafficMind 交通智脑
 启动方式:
     conda activate yolov8
     cd SE_project_backend/ai_detection
-    pip install flask flask-socketio flask-cors eventlet requests
+    pip install flask flask-socketio flask-cors requests
     python api/ai_realtime_service.py
 
 服务地址: http://localhost:5000
@@ -73,6 +73,11 @@ TEMP_VIDEO_DIR = str(_AI_DETECTION_PATH / "temp_videos")
 OUTPUT_VIDEO_DIR = str(_AI_DETECTION_PATH / "output" / "videos")
 VIOLATIONS_DIR = str(_AI_DETECTION_PATH / "output" / "screenshots")
 
+# 后端认证配置（用于图片上传和违规上报）
+# 使用专用的AI服务账号，避免使用真实用户账号
+BACKEND_USERNAME = "ai-detection-service"
+BACKEND_PASSWORD = "ai_service_2025"
+
 # 实时推流配置
 TARGET_FPS = 12  # 推送帧率（降低以减少带宽）
 JPEG_QUALITY = 70  # JPEG 压缩质量 (0-100)
@@ -110,14 +115,27 @@ signal_lock = threading.Lock()  # 线程安全锁
 SIGNAL_SYNC_INTERVAL = 2  # 从后端获取信号灯状态的间隔（秒）
 backend_signal_fetcher = None  # 后台同步任务
 
+# 信号灯数据源模式
+# 可选值: 'auto' (优先后端，降级到模拟), 'backend' (仅后端), 'simulation' (仅模拟), 'manual' (手动设置)
+signal_source_mode = 'auto'
+signal_mode_lock = threading.Lock()
+
+# 当前实际使用的数据源 ('backend' 或 'simulation' 或 'manual')
+current_active_source = 'unknown'
+last_source_check_time = None
+
 
 # ==================== 信号灯同步功能 ====================
 
 def fetch_signal_states_from_backend():
     """
-    从 Java 后端获取信号灯状态
+    根据当前模式获取信号灯状态
 
-    如果 Java 后端不可用，则根据系统时间模拟信号灯状态
+    模式说明：
+    - 'auto': 优先从 Java 后端获取，失败时降级到时间模拟
+    - 'backend': 仅从 Java 后端获取，失败时不更新
+    - 'simulation': 仅使用时间模拟，不调用后端
+    - 'manual': 手动设置模式，不自动更新
 
     信号灯模拟逻辑（60秒周期）：
     - 0-20秒: 南北直行绿灯 + 南北左转红灯 + 东西直行红灯 + 东西左转红灯
@@ -134,64 +152,113 @@ def fetch_signal_states_from_backend():
     - east_bound: 直行信号
     - west_bound: 直行信号
     """
+    global current_signal_states, current_left_turn_signals, signal_source_mode, current_active_source, last_source_check_time
+
+    # 获取当前模式
+    with signal_mode_lock:
+        mode = signal_source_mode
+
+    # 手动模式：不自动更新
+    if mode == 'manual':
+        current_active_source = 'manual'
+        last_source_check_time = datetime.now()
+        return True
+
+    # 仅模拟模式：直接跳到模拟逻辑
+    if mode == 'simulation':
+        current_active_source = 'simulation'
+        last_source_check_time = datetime.now()
+        _use_time_simulation()
+        return True
+
+    # 后端模式或自动模式：尝试从 Java 后端获取
+    if mode in ['backend', 'auto']:
+        try:
+            # 尝试调用 Java 后端获取信号灯状态
+            url = f"{BACKEND_BASE_URL}/multi-direction-traffic/intersections/1/status"
+            response = requests.get(url, timeout=3)
+
+            if response.status_code == 200:
+                # Java 后端可用，从 Java 获取
+                data = response.json()
+
+                # 方向映射
+                direction_map = {
+                    'NORTH': 'north_bound',
+                    'SOUTH': 'south_bound',
+                    'EAST': 'east_bound',
+                    'WEST': 'west_bound'
+                }
+
+                new_states = {}
+                new_left_turns = {}
+                state_changed = False
+
+                for java_dir, py_dir in direction_map.items():
+                    if java_dir in data:
+                        state_data = data[java_dir]
+
+                        straight_phase = state_data.get('straightPhase', 'RED')
+                        left_turn_phase = state_data.get('leftTurnPhase', 'RED')
+
+                        new_straight = straight_phase.lower() if straight_phase else 'red'
+                        new_left = left_turn_phase.lower() if left_turn_phase else 'red'
+
+                        if current_signal_states.get(py_dir, '') != new_straight:
+                            state_changed = True
+                        if current_left_turn_signals.get(py_dir, '') != new_left:
+                            state_changed = True
+
+                        new_states[py_dir] = new_straight
+                        new_left_turns[py_dir] = new_left
+
+                if new_states:
+                    with signal_lock:
+                        current_signal_states.update(new_states)
+                        current_left_turn_signals.update(new_left_turns)
+
+                    # 记录成功使用后端
+                    current_active_source = 'backend'
+                    last_source_check_time = datetime.now()
+
+                    if state_changed:
+                        print(f"[信号同步] ✅ 从 Java 后端获取 (模式: {mode})")
+                        for direction in new_states.keys():
+                            straight = new_states[direction]
+                            left = new_left_turns[direction]
+                            straight_emoji = "🟢" if straight == "green" else "🔴" if straight == "red" else "🟡"
+                            left_emoji = "🟢" if left == "green" else "🔴" if left == "red" else "🟡"
+                            print(f"  {straight_emoji} {direction}: 直行={straight} | 左转={left}")
+                        socketio.emit('traffic', {
+                            'signals': convert_to_serializable(current_signal_states.copy()),
+                            'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy())
+                        })
+
+                return True
+
+        except Exception as e:
+            if mode == 'backend':
+                # 仅后端模式：失败时不降级
+                current_active_source = 'backend_failed'
+                last_source_check_time = datetime.now()
+                print(f"[信号同步] ❌ Java 后端不可用 (模式: backend) - {e}")
+                return False
+            # auto 模式：继续执行下面的模拟逻辑
+            print(f"[信号同步] ⚠️  Java 后端不可用，降级到时间模拟 (模式: auto)")
+
+    # auto 模式且后端失败：使用时间模拟
+    if mode == 'auto':
+        current_active_source = 'simulation'
+        last_source_check_time = datetime.now()
+        _use_time_simulation()
+        return True
+
+    return False
+
+
+def _use_time_simulation():
+    """使用系统时间模拟信号灯状态"""
     global current_signal_states, current_left_turn_signals
-
-    try:
-        # 尝试调用 Java 后端获取信号灯状态
-        url = f"{BACKEND_BASE_URL}/multi-direction-traffic/intersections/1/status"
-        response = requests.get(url, timeout=3)
-
-        if response.status_code == 200:
-            # Java 后端可用，从 Java 获取
-            data = response.json()
-
-            # 方向映射
-            direction_map = {
-                'NORTH': 'north_bound',
-                'SOUTH': 'south_bound',
-                'EAST': 'east_bound',
-                'WEST': 'west_bound'
-            }
-
-            new_states = {}
-            new_left_turns = {}
-            state_changed = False
-
-            for java_dir, py_dir in direction_map.items():
-                if java_dir in data:
-                    state_data = data[java_dir]
-
-                    straight_phase = state_data.get('straightPhase', 'RED')
-                    left_turn_phase = state_data.get('leftTurnPhase', 'RED')
-
-                    new_straight = straight_phase.lower() if straight_phase else 'red'
-                    new_left = left_turn_phase.lower() if left_turn_phase else 'red'
-
-                    if current_signal_states.get(py_dir, '') != new_straight:
-                        state_changed = True
-                    if current_left_turn_signals.get(py_dir, '') != new_left:
-                        state_changed = True
-
-                    new_states[py_dir] = new_straight
-                    new_left_turns[py_dir] = new_left
-
-            if new_states:
-                with signal_lock:
-                    current_signal_states.update(new_states)
-                    current_left_turn_signals.update(new_left_turns)
-
-                if state_changed:
-                    print(f"[信号同步] 从 Java 后端获取")
-                    for direction, state in new_states.items():
-                        emoji = "🟢" if state == "green" else "🔴" if state == "red" else "🟡"
-                        print(f"  {emoji} {direction}: {state}")
-                    socketio.emit('traffic', convert_to_serializable(current_signal_states.copy()))
-
-            return True
-
-    except:
-        # Java 后端不可用，使用时间模拟
-        pass
 
     # 使用系统时间模拟信号灯状态
     now = datetime.now()
@@ -310,6 +377,9 @@ def fetch_signal_states_from_backend():
         if current_signal_states.get(direction) != new_states[direction]:
             state_changed = True
             break
+        if current_left_turn_signals.get(direction) != new_left_turns[direction]:
+            state_changed = True
+            break
 
     if state_changed:
         with signal_lock:
@@ -322,9 +392,10 @@ def fetch_signal_states_from_backend():
             print(f"  {emoji} {direction}: 直行={state} | 左转={new_left_turns[direction]}")
 
         # 广播给前端
-        socketio.emit('traffic', convert_to_serializable(current_signal_states.copy()))
-
-    return True
+        socketio.emit('traffic', {
+            'signals': convert_to_serializable(current_signal_states.copy()),
+            'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy())
+        })
 
 
 def start_signal_sync_task():
@@ -332,16 +403,31 @@ def start_signal_sync_task():
     global backend_signal_fetcher
 
     def sync_loop():
-        """同步循环"""
+        """同步循环 - 使用精确定时，避免累积误差"""
+        import time
+        next_run = time.time()
+
         while True:
+            start_time = time.time()
             try:
+                # 在独立线程中执行，避免阻塞主循环
                 fetch_signal_states_from_backend()
             except Exception as e:
                 print(f"[信号同步] 异常: {e}")
 
-            time.sleep(SIGNAL_SYNC_INTERVAL)
+            # 计算执行时间
+            execution_time = time.time() - start_time
+            if execution_time > 1.0:  # 如果执行超过1秒，输出警告
+                print(f"[信号同步] ⚠️  同步耗时: {execution_time:.2f}秒")
 
-    # 启动后台线程
+            # 计算下一次运行时间（精确定时，不累积误差）
+            next_run += SIGNAL_SYNC_INTERVAL
+            sleep_time = max(0, next_run - time.time())
+
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+    # 使用标准 threading 启动后台线程
     backend_signal_fetcher = threading.Thread(target=sync_loop, daemon=True)
     backend_signal_fetcher.start()
     print(f"[信号同步] 已启动，每 {SIGNAL_SYNC_INTERVAL} 秒同步一次")
@@ -427,7 +513,10 @@ def receive_traffic_signal():
             print(f"  {emoji} {direction}: {state}")
 
         # 广播给前端
-        socketio.emit('traffic', convert_to_serializable(current_signal_states.copy()))
+        socketio.emit('traffic', {
+            'signals': convert_to_serializable(current_signal_states.copy()),
+            'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy())
+        })
 
         return jsonify({
             "success": True,
@@ -455,6 +544,112 @@ def get_traffic_signal_status():
         })
 
 
+@app.route('/api/traffic/signal-source-mode', methods=['GET'])
+def get_signal_source_mode():
+    """
+    获取当前信号灯数据源模式
+
+    返回:
+    {
+        "success": true,
+        "mode": "auto",  // 设置的模式: auto/backend/simulation/manual
+        "description": "优先后端，降级到模拟",
+        "activeSource": "backend",  // 实际使用的数据源: backend/simulation/manual/backend_failed/unknown
+        "lastCheckTime": "2025-12-26T17:30:45",
+        "availableModes": {
+            "auto": "优先后端，降级到模拟",
+            "backend": "仅后端",
+            "simulation": "仅模拟",
+            "manual": "手动设置"
+        }
+    }
+    """
+    mode_descriptions = {
+        'auto': '优先后端，降级到模拟',
+        'backend': '仅后端',
+        'simulation': '仅模拟',
+        'manual': '手动设置'
+    }
+
+    source_descriptions = {
+        'backend': '✅ Java 后端',
+        'simulation': '🔄 时间模拟',
+        'manual': '🎮 手动设置',
+        'backend_failed': '❌ 后端失败',
+        'unknown': '❓ 未知'
+    }
+
+    with signal_mode_lock:
+        current_mode = signal_source_mode
+
+    return jsonify({
+        "success": True,
+        "mode": current_mode,
+        "description": mode_descriptions.get(current_mode, "未知模式"),
+        "activeSource": current_active_source,
+        "activeSourceDescription": source_descriptions.get(current_active_source, "未知"),
+        "lastCheckTime": last_source_check_time.isoformat() if last_source_check_time else None,
+        "availableModes": mode_descriptions
+    })
+
+
+@app.route('/api/traffic/signal-source-mode', methods=['POST'])
+def set_signal_source_mode():
+    """
+    设置信号灯数据源模式
+
+    请求体:
+    {
+        "mode": "auto"  // auto/backend/simulation/manual
+    }
+
+    模式说明:
+    - auto: 优先从 Java 后端获取，失败时降级到时间模拟（默认）
+    - backend: 仅从 Java 后端获取，失败时不更新信号
+    - simulation: 仅使用时间模拟，不调用后端
+    - manual: 手动设置模式，不自动更新（需配合 POST /api/traffic 使用）
+    """
+    global signal_source_mode
+
+    try:
+        data = request.json
+
+        if not data or 'mode' not in data:
+            return jsonify({
+                "success": False,
+                "message": "请求体必须包含 'mode' 字段"
+            }), 400
+
+        new_mode = data['mode']
+        valid_modes = ['auto', 'backend', 'simulation', 'manual']
+
+        if new_mode not in valid_modes:
+            return jsonify({
+                "success": False,
+                "message": f"无效的模式。可选值: {', '.join(valid_modes)}"
+            }), 400
+
+        with signal_mode_lock:
+            old_mode = signal_source_mode
+            signal_source_mode = new_mode
+
+        print(f"[信号源模式] 已切换: {old_mode} -> {new_mode}")
+
+        return jsonify({
+            "success": True,
+            "message": f"信号源模式已切换为: {new_mode}",
+            "oldMode": old_mode,
+            "newMode": new_mode
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": f"设置失败: {str(e)}"
+        }), 500
+
+
 @app.route('/upload-video', methods=['POST'])
 def upload_video():
     """
@@ -466,6 +661,7 @@ def upload_video():
         - taskId: 任务ID（可选）
         - intersectionId: 路口ID（可选，默认1）
         - direction: 检测方向（可选，默认SOUTH）
+        - roisConfig: ROI配置文件名（可选，默认rois.json，可选rois2.json）
 
     返回:
     {
@@ -494,6 +690,15 @@ def upload_video():
         task_id = request.form.get('taskId', f"task_{int(time.time())}")
         intersection_id = int(request.form.get('intersectionId', 1))
         direction = request.form.get('direction', 'SOUTH')
+        rois_config = request.form.get('roisConfig', 'rois.json')
+
+        # 验证 ROI 配置文件
+        rois_path = str(_AI_DETECTION_PATH / "data" / rois_config)
+        if not os.path.exists(rois_path):
+            return jsonify({
+                "success": False,
+                "message": f"ROI配置文件不存在: {rois_config}"
+            }), 400
 
         # 保存视频文件
         video_filename = f"{task_id}_{video_file.filename}"
@@ -503,6 +708,7 @@ def upload_video():
         print(f"✅ 视频已保存: {video_path}")
         print(f"📝 任务ID: {task_id}")
         print(f"🔍 路口ID: {intersection_id}, 方向: {direction}")
+        print(f"📐 ROI配置: {rois_config}")
 
         # 初始化任务状态
         tasks[task_id] = {
@@ -511,13 +717,14 @@ def upload_video():
             "startTime": datetime.now().isoformat(),
             "violations": [],
             "error": None,
-            "videoPath": video_path
+            "videoPath": video_path,
+            "roisConfig": rois_config
         }
 
         # 异步启动处理
         thread = threading.Thread(
             target=process_video_realtime,
-            args=(task_id, None, video_path, intersection_id, direction)
+            args=(task_id, None, video_path, intersection_id, direction, rois_path)
         )
         thread.daemon = True
         thread.start()
@@ -526,6 +733,7 @@ def upload_video():
             "success": True,
             "taskId": task_id,
             "videoPath": video_path,
+            "roisConfig": rois_config,
             "message": "视频已上传，任务已启动。请通过 WebSocket 连接并订阅此任务ID"
         })
 
@@ -548,7 +756,8 @@ def start_realtime_processing():
         "videoUrl": "http://...",  // MinIO 视频地址
         "videoPath": "/local/path.mp4",  // 或本地路径（二选一）
         "intersectionId": 1,
-        "direction": "SOUTH"
+        "direction": "SOUTH",
+        "roisConfig": "rois.json"  // ROI配置文件名（可选，默认rois.json，可选rois2.json）
     }
 
     返回:
@@ -565,6 +774,7 @@ def start_realtime_processing():
         video_path = data.get('videoPath')
         intersection_id = data.get('intersectionId', 1)
         direction = data.get('direction', 'SOUTH')
+        rois_config = data.get('roisConfig', 'rois.json')
         
         # 校验参数
         if not video_url and not video_path:
@@ -573,19 +783,28 @@ def start_realtime_processing():
                 "message": "缺少 videoUrl 或 videoPath 参数"
             }), 400
         
+        # 验证 ROI 配置文件
+        rois_path = str(_AI_DETECTION_PATH / "data" / rois_config)
+        if not os.path.exists(rois_path):
+            return jsonify({
+                "success": False,
+                "message": f"ROI配置文件不存在: {rois_config}"
+            }), 400
+        
         # 初始化任务状态
         tasks[task_id] = {
             "status": "starting",
             "progress": 0,
             "startTime": datetime.now().isoformat(),
             "violations": [],
-            "error": None
+            "error": None,
+            "roisConfig": rois_config
         }
         
         # 异步启动处理
         thread = threading.Thread(
             target=process_video_realtime,
-            args=(task_id, video_url, video_path, intersection_id, direction)
+            args=(task_id, video_url, video_path, intersection_id, direction, rois_path)
         )
         thread.daemon = True
         thread.start()
@@ -593,6 +812,7 @@ def start_realtime_processing():
         return jsonify({
             "success": True,
             "taskId": task_id,
+            "roisConfig": rois_config,
             "message": "任务已启动，请通过 WebSocket 连接并监听 'frame' 和 'violation' 事件"
         })
         
@@ -625,12 +845,14 @@ def test_with_local_video():
     
     请求体:
     {
-        "videoName": "car_1_cross.mp4"  // data 目录下的视频文件名
+        "videoName": "car_1_cross.mp4",  // data 目录下的视频文件名
+        "roisConfig": "rois.json"  // ROI配置文件名（可选，默认rois.json，可选rois2.json）
     }
     """
     try:
         data = request.json
         video_name = data.get('videoName', 'car_1_cross.mp4')
+        rois_config = data.get('roisConfig', 'rois.json')
         video_path = os.path.join('./data', video_name)
         
         if not os.path.exists(video_path):
@@ -638,6 +860,14 @@ def test_with_local_video():
                 "success": False,
                 "message": f"视频不存在: {video_path}"
             }), 404
+        
+        # 验证 ROI 配置文件
+        rois_path = str(_AI_DETECTION_PATH / "data" / rois_config)
+        if not os.path.exists(rois_path):
+            return jsonify({
+                "success": False,
+                "message": f"ROI配置文件不存在: {rois_config}"
+            }), 400
         
         task_id = f"test_{int(time.time())}"
         
@@ -647,13 +877,14 @@ def test_with_local_video():
             "progress": 0,
             "startTime": datetime.now().isoformat(),
             "violations": [],
-            "error": None
+            "error": None,
+            "roisConfig": rois_config
         }
         
         # 异步启动
         thread = threading.Thread(
             target=process_video_realtime,
-            args=(task_id, None, video_path, 1, 'SOUTH')
+            args=(task_id, None, video_path, 1, 'SOUTH', rois_path)
         )
         thread.daemon = True
         thread.start()
@@ -662,6 +893,7 @@ def test_with_local_video():
             "success": True,
             "taskId": task_id,
             "videoPath": video_path,
+            "roisConfig": rois_config,
             "message": "本地视频测试任务已启动"
         })
         
@@ -683,7 +915,10 @@ def handle_connect():
     emit('connected', {'message': 'Connected to AI Realtime Service'})
     # 发送当前信号灯状态给新连接的客户端
     with signal_lock:
-        emit('traffic', convert_to_serializable(current_signal_states.copy()))
+        emit('traffic', {
+            'signals': convert_to_serializable(current_signal_states.copy()),
+            'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy())
+        })
 
 
 @socketio.on('disconnect')
@@ -704,7 +939,8 @@ def handle_subscribe(data):
 # ==================== 核心处理逻辑 ====================
 
 def process_video_realtime(task_id: str, video_url: str, video_path: str,
-                           intersection_id: int, direction: str):
+                           intersection_id: int, direction: str, 
+                           rois_path: str = None):
     """
     实时处理视频并推送帧
     
@@ -714,7 +950,11 @@ def process_video_realtime(task_id: str, video_url: str, video_path: str,
         video_path: 本地视频路径（直接使用）
         intersection_id: 路口ID
         direction: 方向
+        rois_path: ROI配置文件路径（可选，默认使用全局配置）
     """
+    # 如果没有指定 ROI 配置，使用默认配置
+    if rois_path is None:
+        rois_path = ROIS_PATH
     try:
         print(f"\n{'='*60}")
         print(f"[任务 {task_id}] 开始实时处理")
@@ -738,13 +978,16 @@ def process_video_realtime(task_id: str, video_url: str, video_path: str,
         
         # 2. 初始化检测器（复用现有代码）
         print(f"[任务 {task_id}] 初始化检测器...")
+        print(f"[任务 {task_id}] 使用 ROI 配置: {rois_path}")
         
         tracker = VehicleTracker(model_path=MODEL_PATH, conf_threshold=0.25)
         detector = ViolationDetector(
-            rois_path=ROIS_PATH,
+            rois_path=rois_path,  # 使用传入的 ROI 配置
             screenshot_dir=VIOLATIONS_DIR,
             intersection_id=intersection_id,
-            enable_api=True  # 启用API自动上报
+            enable_api=True,  # 启用API自动上报
+            backend_username=BACKEND_USERNAME,
+            backend_password=BACKEND_PASSWORD
         )
         
         # 从全局状态初始化信号灯（会在处理过程中实时更新）
@@ -987,8 +1230,8 @@ def draw_detection_results(frame, tracks, violations, detector, tracker=None):
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     
     # 3. 绘制统计信息
-    summary = detector.get_violation_summary()
-    stats_text = f"Total: {summary['total_violations']} | Red: {summary['red_light_running']} | Wrong: {summary['wrong_way_driving']}"
+    summary = detector.get_violation_summary() 
+    stats_text = f"Total: {summary['total_violations']} | Red: {summary['red_light_running']} | Wrong: {summary['wrong_way_driving']} | Across: {summary['lane_change_across_solid_line']} | Waiting: {summary['waiting_area_red_entry']+summary['waiting_area_illegal_exit']}"
     
     # 底部信息栏
     h = annotated.shape[0]
@@ -1423,7 +1666,10 @@ if __name__ == '__main__':
     print("   - 'complete'  : 处理完成通知")
     print("   - 'error'     : 错误通知")
     print("\n" + "=" * 60 + "\n")
-    
+
+    # 启动信号灯同步任务
+    start_signal_sync_task()
+
     # 启动服务
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
 
