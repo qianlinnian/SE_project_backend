@@ -17,14 +17,14 @@ RUN apt-get update && apt-get install -y \
     libgstreamer1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件
-COPY requirements.txt .
+# 复制依赖文件（从 ai_detection 目录）
+COPY ai_detection/requirements.txt .
 
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制应用代码
-COPY . .
+# 复制 AI 检测相关代码（只复制需要的文件）
+COPY ai_detection/ .
 
 # 创建必要的目录
 RUN mkdir -p /app/uploads \
