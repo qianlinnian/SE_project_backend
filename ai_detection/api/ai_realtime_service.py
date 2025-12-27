@@ -1637,7 +1637,7 @@ def detect_batch():
 
 if __name__ == '__main__':
     print("\n" + "=" * 60)
-    print("🚀 TrafficMind AI 实时检测服务")
+    print(" TrafficMind AI 实时检测服务")
     print("=" * 60)
     print(f"📍 HTTP API:    http://localhost:5000")
     print(f"📍 WebSocket:   ws://localhost:5000")

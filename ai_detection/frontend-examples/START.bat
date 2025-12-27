@@ -49,7 +49,7 @@ if not exist "node_modules" (
 )
 
 echo.
-echo 🚀 启动开发服务器...
+echo  启动开发服务器...
 npm run dev
 
 goto end

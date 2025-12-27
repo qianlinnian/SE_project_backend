@@ -37,7 +37,7 @@ class TrafficViolationPipeline:
             screenshot_dir: 违规截图保存目录
             signal_cycle: 信号灯循环周期（秒），默认60秒
         """
-        print("🚀 初始化交通违规检测管道...")
+        print(" 初始化交通违规检测管道...")
         print("=" * 60)
 
         # 1. 初始化车辆追踪器（降低置信度减少漏检）

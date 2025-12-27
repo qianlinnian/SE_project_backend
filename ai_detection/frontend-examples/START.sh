@@ -50,7 +50,7 @@ function start_vite() {
     fi
 
     echo
-    echo "🚀 启动开发服务器..."
+    echo " 启动开发服务器..."
     npm run dev
 }
 

@@ -51,7 +51,7 @@ class TrafficViolationPipelineManual:
             default_signal: 默认信号灯状态
             rotation_angle: 视频旋转角度，用于修正旋转的视频 (0, 90, -90, 180, 270)
         """
-        print("🚀 初始化交通违规检测管道（手动控制版本）...")
+        print(" 初始化交通违规检测管道（手动控制版本）...")
         print("=" * 60)
 
         # 视频旋转角度

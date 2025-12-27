@@ -254,26 +254,7 @@
         ]
       ]
     },
-    "left_turn_waiting_area": [
-      [
-        [
-          704,
-          548
-        ],
-        [
-          786,
-          540
-        ],
-        [
-          816,
-          658
-        ],
-        [
-          735,
-          654
-        ]
-      ]
-    ]
+    "left_turn_waiting_area": []
   },
   "south_bound": {
     "stop_line": [
@@ -374,7 +355,26 @@
         ]
       ]
     },
-    "left_turn_waiting_area": []
+    "left_turn_waiting_area": [
+      [
+        [
+          704,
+          548
+        ],
+        [
+          786,
+          540
+        ],
+        [
+          816,
+          658
+        ],
+        [
+          735,
+          654
+        ]
+      ]
+    ]
   },
   "west_bound": {
     "stop_line": [

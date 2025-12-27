@@ -583,7 +583,7 @@ interface SignalStatusResponse {
 
 ---
 
-## 🚀 性能建议
+##  性能建议
 
 - 使用 WebSocket 而不是轮询以获得实时数据
 - 限制违规记录列表长度 (如只保留最近 50 条)

@@ -68,7 +68,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🚀 启动服务
+##  启动服务
 
 ### 【后端】AI 检测服务
 
@@ -126,7 +126,7 @@ cd frontend-examples
 
 ```bash
 # 进入前端目录
-cd frontend-examples/vite-app
+cd ai_detection/frontend-examples/vite-app
 
 # 安装依赖（首次运行）
 npm install

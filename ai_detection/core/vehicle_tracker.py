@@ -25,7 +25,7 @@ class VehicleTracker:
             conf_threshold: 置信度阈值 (降低可减少漏检，0.2-0.3推荐)
             iou_threshold: IOU阈值用于NMS (降低可保留更多重叠目标)
         """
-        print(f"🚀 加载 YOLOv8 模型: {model_path}")
+        print(f" 加载 YOLOv8 模型: {model_path}")
         self.model = YOLO(model_path)
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
