@@ -21,7 +21,7 @@ public class PasswordVerifyUtil {
         System.out.println("========== BCrypt密码验证 ==========");
         System.out.println("存储的哈希: " + storedHash);
         System.out.println("输入的密码: " + inputPassword);
-        System.out.println("验证结果: " + (isMatch ? "✅ 匹配成功" : "❌ 匹配失败"));
+        System.out.println("验证结果: " + (isMatch ? "匹配成功" : "匹配失败"));
         
         if (!isMatch) {
             System.out.println("\n尝试重新加密password123:");

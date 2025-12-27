@@ -1,0 +1,37 @@
+# TrafficMind 项目依赖
+
+# 计算机视觉
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# 深度学习 (YOLOv8)
+ultralytics>=8.0.0
+
+# 目标追踪 (DeepSORT)
+# deep-sort-realtime>=1.3.0  # 可选
+
+# 后端框架 + WebSocket 实时推流
+flask>=3.0.0
+flask-cors>=4.0.0
+flask-socketio>=5.3.0
+requests>=2.31.0
+
+# WebSocket 支持
+python-socketio>=5.10.0
+eventlet>=0.34.0
+
+# 异步支持 (可选)
+fastapi>=0.104.0
+uvicorn>=0.24.0
+websockets>=12.0
+
+# 数据库
+# sqlalchemy>=2.0.0
+# psycopg2-binary>=2.9.0  # PostgreSQL
+
+# Redis
+# redis>=5.0.0
+
+# 工具
+python-multipart>=0.0.6
+pydantic>=2.0.0

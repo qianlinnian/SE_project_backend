@@ -51,20 +51,24 @@ public class SecurityConfig {
         http
                 // 禁用CSRF（使用JWT不需要CSRF保护）
                 .csrf(AbstractHttpConfigurer::disable)
-                
+
                 // 配置请求授权
                 .authorizeHttpRequests(auth -> auth
                         // 公开接口
-                        .requestMatchers("/api/auth/**", "/api/health", "/api/", "/api/redis-test/**", "/api/intersections/**", "/api/dashboard/**", "/api/violations/**").permitAll()
+                        .requestMatchers("/api/auth/**", "/api/health", "/api/",
+                                "/api/redis-test/**", "/api/intersections/**",
+                                "/api/dashboard/**", "/api/violations/**",
+                                "/api/ai-integration/**", "/api/violation-detection/**",
+                                "/api/multi-direction-traffic/**", "/api/test/**",
+                                "/api/signals/**")
+                        .permitAll()
                         // 其他所有请求需要认证
-                        .anyRequest().authenticated()
-                )
-                
+                        .anyRequest().authenticated())
+
                 // 无状态会话管理（JWT不需要Session）
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-                
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
                 // 添加JWT过滤器
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

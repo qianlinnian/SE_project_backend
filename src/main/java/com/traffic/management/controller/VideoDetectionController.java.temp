@@ -1,0 +1,694 @@
+package com.traffic.management.controller;
+
+import com.traffic.management.entity.VideoAnalysisTask;
+import com.traffic.management.service.*;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+/**
+ * 综合检测控制器 - 支持视频帧分析和图片上传检测
+ * 集成红绿灯状态验证和AI模型分析
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/violation-detection")
+public class VideoDetectionController {
+
+    @Autowired
+    private ViolationService violationService;
+
+    @Autowired
+    private VideoDetectionService videoDetectionService;
+
+    @Autowired
+    private TrafficLightStateService trafficLightStateService;
+
+    @Autowired
+    private VideoFrameAnalysisService videoFrameAnalysisService;
+
+    @Autowired
+    private VideoTaskStatusService videoTaskStatusService;
+
+    @Autowired
+    private TaskStatusService taskStatusService;
+
+    @Autowired
+    private AIIntegrationService aiIntegrationService;
+
+    /**
+     * 视频帧检测违章上报 - 集成红绿灯状态验证
+     * 适用于实时视频流检测
+     * 支持多方向检测：可在请求体中指定direction和turnType参数
+     */
+    @PostMapping("/detect-frame")
+    public Map<String, Object> detectViolationFromFrame(@RequestBody Map<String, Object> detectionData) {
+        try {
+            // 处理从大模型返回的检测结果，自动验证红绿灯状态
+            var savedViolation = videoDetectionService.processDetectionResult(detectionData);
+
+            return Map.of(
+                    "success", true,
+                    "violationId", savedViolation.getId(),
+                    "violationType", savedViolation.getViolationType().toString(),
+                    "direction", savedViolation.getDirection().getChineseName(),
+                    "turnType", savedViolation.getTurnType().getChineseName(),
+                    "lightState", trafficLightStateService.getCurrentLightState(
+                            savedViolation.getIntersectionId(),
+                            savedViolation.getOccurredAt()).toString(),
+                    "message", "违章检测结果已保存");
+        } catch (IllegalArgumentException e) {
+            return Map.of(
+                    "success", false,
+                    "message", e.getMessage(),
+                    "reason", "当前红绿灯状态下不构成违章");
+        } catch (Exception e) {
+            return Map.of(
+                    "success", false,
+                    "message", "处理失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 指定方向的违章检测 - 便捷接口
+     * 为每个方向提供独立的检测端点
+     */
+    @PostMapping("/directions/{direction}/detect-frame")
+    public Map<String, Object> detectViolationFromDirection(
+            @PathVariable String direction,
+            @RequestBody Map<String, Object> detectionData) {
+        try {
+            // 自动添加方向参数到检测数据中
+            detectionData.put("direction", direction.toUpperCase());
+
+            // 如果没有指定turnType，根据违章类型推断
+            if (!detectionData.containsKey("turnType")) {
+                String violationType = detectionData.get("violationType").toString();
+                String turnType = inferTurnType(violationType);
+                detectionData.put("turnType", turnType);
+            }
+
+            // 复用现有的检测逻辑
+            return detectViolationFromFrame(detectionData);
+        } catch (Exception e) {
+            return Map.of(
+                    "success", false,
+                    "message", "方向检测失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * AI结果回调接口 - 接收AI模型分析结果
+     */
+    @PostMapping("/ai-callback")
+    public Map<String, Object> receiveAICallback(@RequestBody Map<String, Object> callbackData) {
+        try {
+            log.info("接收到AI回调结果: {}", callbackData);
+
+            String taskId = callbackData.get("taskId").toString();
+
+            // 检查是否为批量结果
+            if (callbackData.containsKey("results") && callbackData.get("results") instanceof List) {
+                return processBatchAIResults(taskId, (List<Map<String, Object>>) callbackData.get("results"));
+            } else {
+                return processSingleAIResult(taskId, callbackData);
+            }
+
+        } catch (Exception e) {
+            log.error("AI回调处理失败", e);
+            return Map.of(
+                    "success", false,
+                    "message", "AI回调处理失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理单个AI检测结果
+     */
+    private Map<String, Object> processSingleAIResult(String taskId, Map<String, Object> aiResult) {
+        try {
+            // 获取任务信息
+            Optional<VideoAnalysisTask> taskOpt = taskStatusService.getTaskDetails(taskId);
+            if (taskOpt.isEmpty()) {
+                return Map.of("success", false, "message", "任务不存在: " + taskId);
+            }
+
+            VideoAnalysisTask task = taskOpt.get();
+
+            // 保存AI原始结果
+            String resultId = saveAIDetectionResult(taskId, aiResult);
+
+            // 构建完整的违章检测数据
+            Map<String, Object> detectionData = new HashMap<>();
+            detectionData.put("intersectionId", task.getIntersectionId());
+            detectionData.put("direction", task.getDirection().name());
+            detectionData.put("plateNumber", aiResult.get("plateNumber"));
+            detectionData.put("violationType", aiResult.get("violationType"));
+            detectionData.put("confidence", aiResult.get("confidence"));
+            detectionData.put("taskId", taskId);
+            detectionData.put("aiResultId", resultId);
+
+            // 推断转弯类型
+            if (!aiResult.containsKey("turnType")) {
+                String turnType = inferTurnType(aiResult.get("violationType").toString());
+                detectionData.put("turnType", turnType);
+            } else {
+                detectionData.put("turnType", aiResult.get("turnType"));
+            }
+
+            // 处理时间戳
+            if (aiResult.containsKey("timestamp")) {
+                detectionData.put("timestamp", aiResult.get("timestamp"));
+            }
+
+            // 处理边界框和图片URL
+            if (aiResult.containsKey("boundingBox")) {
+                detectionData.put("boundingBox", aiResult.get("boundingBox"));
+            }
+            if (aiResult.containsKey("imageUrl")) {
+                detectionData.put("imageUrl", aiResult.get("imageUrl"));
+            }
+
+            // 验证违章并保存
+            try {
+                Violation savedViolation = videoDetectionService.processDetectionResult(detectionData);
+
+                // 更新AI结果状态为已验证
+                updateAIResultStatus(resultId, AiDetectionResult.ProcessingStatus.VALIDATED,
+                        savedViolation.getId(), null);
+
+                // 更新任务统计
+                updateTaskViolationStats(taskId);
+
+                return Map.of(
+                        "success", true,
+                        "message", "违章验证成功",
+                        "violationId", savedViolation.getId(),
+                        "taskId", taskId,
+                        "resultId", resultId);
+
+            } catch (IllegalArgumentException e) {
+                // 不构成违章，标记为已拒绝
+                updateAIResultStatus(resultId, AiDetectionResult.ProcessingStatus.REJECTED,
+                        null, e.getMessage());
+
+                return Map.of(
+                        "success", true,
+                        "message", "检测结果已拒绝: " + e.getMessage(),
+                        "taskId", taskId,
+                        "resultId", resultId);
+            }
+
+        } catch (Exception e) {
+            log.error("处理AI检测结果失败 - 任务ID: {}", taskId, e);
+            return Map.of(
+                    "success", false,
+                    "message", "处理失败: " + e.getMessage(),
+                    "taskId", taskId);
+        }
+    }
+
+    /**
+     * 处理批量AI检测结果
+     */
+    private Map<String, Object> processBatchAIResults(String taskId, List<Map<String, Object>> aiResults) {
+        log.info("开始处理批量AI结果 - 任务ID: {}, 结果数量: {}", taskId, aiResults.size());
+
+        List<Map<String, Object>> processedResults = new ArrayList<>();
+        int successCount = 0;
+        int rejectedCount = 0;
+        int failedCount = 0;
+
+        for (Map<String, Object> aiResult : aiResults) {
+            Map<String, Object> result = processSingleAIResult(taskId, aiResult);
+            processedResults.add(result);
+
+            if ((Boolean) result.get("success")) {
+                if (result.containsKey("violationId")) {
+                    successCount++;
+                } else {
+                    rejectedCount++;
+                }
+            } else {
+                failedCount++;
+            }
+        }
+
+        // 更新任务状态
+        if (failedCount == 0) {
+            taskStatusService.updateTaskStatus(taskId, VideoAnalysisTask.TaskStatus.AI_COMPLETED, null);
+        } else {
+            taskStatusService.updateTaskStatus(taskId, VideoAnalysisTask.TaskStatus.AI_FAILED,
+                    "部分结果处理失败: " + failedCount + "/" + aiResults.size());
+        }
+
+        log.info("批量AI结果处理完成 - 任务ID: {}, 成功: {}, 拒绝: {}, 失败: {}",
+                taskId, successCount, rejectedCount, failedCount);
+
+        return Map.of(
+                "success", true,
+                "message", "批量处理完成",
+                "taskId", taskId,
+                "totalProcessed", aiResults.size(),
+                "successCount", successCount,
+                "rejectedCount", rejectedCount,
+                "failedCount", failedCount,
+                "results", processedResults);
+    }
+
+    /**
+     * AI完成回调 - AI模型完成所有检测时调用
+     */
+    @PostMapping("/ai-completed")
+    public Map<String, Object> aiAnalysisCompleted(@RequestBody Map<String, Object> completionData) {
+        try {
+            String taskId = completionData.get("taskId").toString();
+            int totalDetections = Integer.parseInt(completionData.get("totalDetections").toString());
+
+            log.info("AI分析完成通知 - 任务ID: {}, 总检测数: {}", taskId, totalDetections);
+
+            // 更新任务状态和统计
+            taskStatusService.updateTaskStatus(taskId, VideoAnalysisTask.TaskStatus.AI_COMPLETED, null);
+            updateTaskViolationStats(taskId);
+
+            // 检查是否所有结果都已处理完成
+            checkAndCompleteTask(taskId);
+
+            return Map.of(
+                    "success", true,
+                    "message", "AI分析完成确认",
+                    "taskId", taskId);
+
+        } catch (Exception e) {
+            log.error("AI完成回调处理失败", e);
+            return Map.of(
+                    "success", false,
+                    "message", "处理失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 根据违章类型推断转弯类型
+     */
+    private String inferTurnType(String violationType) {
+        return switch (violationType.toLowerCase()) {
+            case "违法转弯", "illegal_turn" -> "LEFT_TURN";
+            case "闯红灯", "red_light" -> "STRAIGHT";
+            case "逆行", "wrong_way" -> "STRAIGHT";
+            case "压实线", "cross_solid_line" -> "STRAIGHT";
+            default -> "STRAIGHT";
+        };
+    }
+
+    /**
+     * 保存AI检测原始结果
+     */
+    private String saveAIDetectionResult(String taskId, Map<String, Object> aiResult) {
+        // 这里应该调用AiDetectionResultService来保存原始结果
+        // 为了简化，现在返回一个UUID
+        return java.util.UUID.randomUUID().toString();
+    }
+
+    /**
+     * 更新AI结果处理状态
+     */
+    private void updateAIResultStatus(String resultId, AiDetectionResult.ProcessingStatus status,
+            Long violationId, String reason) {
+        // 这里应该调用AiDetectionResultService来更新状态
+        log.info("更新AI结果状态 - 结果ID: {}, 状态: {}, 违章ID: {}, 原因: {}",
+                resultId, status, violationId, reason);
+    }
+
+    /**
+     * 更新任务违章统计
+     */
+    private void updateTaskViolationStats(String taskId) {
+        // 这里应该查询ai_detection_results表统计数据
+        // 为了简化，现在只记录日志
+        log.info("更新任务违章统计 - 任务ID: {}", taskId);
+    }
+
+    /**
+     * 检查并完成任务
+     */
+    private void checkAndCompleteTask(String taskId) {
+        // 检查是否所有AI结果都已处理完成，如果是则标记任务完成
+        log.info("检查任务完成状态 - 任务ID: {}", taskId);
+        // 这里应该调用taskStatusService.completeTask(taskId);
+
+    /**
+     * 批量视频违章检测上报 - 集成红绿灯状态验证
+     * 适用于离线视频批量检测
+     */
+    @PostMapping("/detect-batch")
+    public Map<String, Object> detectViolationsBatch(@RequestBody Map<String, Object> batchData) {
+        @SuppressWarnings("unchecked")
+        var violations = (List<Map<String, Object>>) batchData.get("violations");
+
+        Map<String, Object> result = videoDetectionService.processBatchDetection(violations);
+        result.put("success", true);
+        result.put("message", "批量违章检测完成");
+
+        return result;
+    }
+
+    /**
+     * 多方向视频分析上传接口 - 支持AI集成
+     * 上传视频文件并发送给AI模型进行违章检测
+     */
+    @PostMapping(value = "/upload-video-for-analysis", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> uploadVideoForAIAnalysis(
+            @RequestParam("video") MultipartFile videoFile,
+            @RequestParam("intersectionId") Long intersectionId,
+            @RequestParam("direction") String direction) {
+
+        try {
+            // 参数验证
+            if (videoFile.isEmpty()) {
+                return Map.of("success", false, "message", "视频文件不能为空");
+            }
+
+            // 验证方向参数
+            VideoAnalysisTask.Direction taskDirection;
+            try {
+                taskDirection = VideoAnalysisTask.Direction.valueOf(direction.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                return Map.of("success", false, "message", "无效的方向参数: " + direction);
+            }
+
+            // 生成任务ID
+            String taskId = java.util.UUID.randomUUID().toString();
+
+            // 上传视频文件
+            String videoUrl = videoDetectionService.uploadVideoFile(videoFile, intersectionId);
+
+            // 创建任务记录
+            VideoAnalysisTask task = taskStatusService.createTask(
+                    taskId, intersectionId, taskDirection,
+                    videoUrl, videoUrl, videoFile.getOriginalFilename(), videoFile.getSize());
+
+            // 异步发送给AI模型分析
+            aiIntegrationService.analyzeVideoAsync(taskId, videoUrl, intersectionId, direction);
+
+            return Map.of(
+                    "success", true,
+                    "taskId", taskId,
+                    "message", "视频上传成功，AI分析已开始",
+                    "intersectionId", intersectionId,
+                    "direction", direction,
+                    "directionName", taskDirection.getChineseName(),
+                    "originalFilename", videoFile.getOriginalFilename(),
+                    "fileSize", videoFile.getSize(),
+                    "videoUrl", videoUrl,
+                    "status", "AI_PROCESSING");
+
+        } catch (Exception e) {
+            log.error("视频上传分析失败", e);
+            return Map.of(
+                    "success", false,
+                    "message", "视频上传失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 批量上传多方向视频
+     * 支持同时上传一个路口的多个方向视频
+     */
+    @PostMapping(value = "/upload-multi-direction-videos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> uploadMultiDirectionVideos(
+            @RequestParam("intersectionId") Long intersectionId,
+            @RequestParam(value = "eastVideo", required = false) MultipartFile eastVideo,
+            @RequestParam(value = "southVideo", required = false) MultipartFile southVideo,
+            @RequestParam(value = "westVideo", required = false) MultipartFile westVideo,
+            @RequestParam(value = "northVideo", required = false) MultipartFile northVideo) {
+
+        List<Map<String, Object>> results = new ArrayList<>();
+        List<String> taskIds = new ArrayList<>();
+
+        // 处理各个方向的视频
+        if (eastVideo != null && !eastVideo.isEmpty()) {
+            Map<String, Object> result = uploadSingleDirectionVideo(intersectionId, "EAST", eastVideo);
+            results.add(result);
+            if ((Boolean) result.get("success")) {
+                taskIds.add((String) result.get("taskId"));
+            }
+        }
+
+        if (southVideo != null && !southVideo.isEmpty()) {
+            Map<String, Object> result = uploadSingleDirectionVideo(intersectionId, "SOUTH", southVideo);
+            results.add(result);
+            if ((Boolean) result.get("success")) {
+                taskIds.add((String) result.get("taskId"));
+            }
+        }
+
+        if (westVideo != null && !westVideo.isEmpty()) {
+            Map<String, Object> result = uploadSingleDirectionVideo(intersectionId, "WEST", westVideo);
+            results.add(result);
+            if ((Boolean) result.get("success")) {
+                taskIds.add((String) result.get("taskId"));
+            }
+        }
+
+        if (northVideo != null && !northVideo.isEmpty()) {
+            Map<String, Object> result = uploadSingleDirectionVideo(intersectionId, "NORTH", northVideo);
+            results.add(result);
+            if ((Boolean) result.get("success")) {
+                taskIds.add((String) result.get("taskId"));
+            }
+        }
+
+        return Map.of(
+                "success", true,
+                "message", "批量上传完成",
+                "intersectionId", intersectionId,
+                "totalUploaded", taskIds.size(),
+                "taskIds", taskIds,
+                "detailResults", results);
+    }
+
+    /**
+     * 查询任务状态和进度
+     */
+    @GetMapping("/task/{taskId}/status")
+    public Map<String, Object> getTaskStatus(@PathVariable String taskId) {
+        return taskStatusService.getTaskStatusInfo(taskId);
+    }
+
+    /**
+     * 获取路口任务列表
+     */
+    @GetMapping("/intersection/{intersectionId}/tasks")
+    public Map<String, Object> getIntersectionTasks(
+            @PathVariable Long intersectionId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        Page<VideoAnalysisTask> tasks = taskStatusService.getIntersectionTasks(intersectionId, pageable);
+
+        return Map.of(
+                "success", true,
+                "intersectionId", intersectionId,
+                "totalElements", tasks.getTotalElements(),
+                "totalPages", tasks.getTotalPages(),
+                "currentPage", page,
+                "pageSize", size,
+                "tasks", tasks.getContent().stream()
+                        .map(task -> taskStatusService.getTaskStatusInfo(task.getTaskId()))
+                        .collect(Collectors.toList()));
+    }
+
+    /**
+     * 获取任务统计信息
+     */
+    @GetMapping("/tasks/statistics")
+    public Map<String, Object> getTaskStatistics() {
+        Map<String, Object> stats = taskStatusService.getTaskStatistics();
+        stats.put("success", true);
+        return stats;
+    }
+
+    /**
+     * 辅助方法：上传单个方向的视频
+     */
+    private Map<String, Object> uploadSingleDirectionVideo(Long intersectionId, String direction,
+            MultipartFile videoFile) {
+        try {
+            return (Map<String, Object>) uploadVideoForAIAnalysis(videoFile, intersectionId, direction);
+        } catch (Exception e) {
+            return Map.of(
+                    "success", false,
+                    "direction", direction,
+                    "message", "上传失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 视频文件上传并自动分析帧（旧版兼容接口）
+     * 上传视频文件并自动提取帧进行违章检测
+     */
+    @PostMapping(value = "/upload-video", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> uploadVideoAndDetect(
+            @RequestParam("video") MultipartFile videoFile,
+            @RequestParam("intersectionId") Long intersectionId,
+            @RequestParam(value = "cameraId", required = false) String cameraId,
+            @RequestParam(value = "autoAnalyze", defaultValue = "false") boolean autoAnalyze) {
+
+        try {
+            String taskId = "task_" + System.currentTimeMillis();
+            if (cameraId == null) {
+                cameraId = "upload-" + intersectionId;
+            }
+
+            if (autoAnalyze) {
+                // 自动分析模式：异步处理视频并分析帧
+                videoTaskStatusService.setTaskProcessing(taskId, "视频上传完成，开始帧分析...");
+
+                // 异步处理视频
+                videoFrameAnalysisService.processVideoAsync(videoFile, intersectionId, cameraId, taskId)
+                        .thenAccept(result -> {
+                            // 处理完成后更新状态
+                            if ("COMPLETED".equals(result.get("status"))) {
+                                videoTaskStatusService.setTaskCompleted(taskId, result);
+                            } else {
+                                videoTaskStatusService.setTaskFailed(taskId, result.get("message").toString());
+                            }
+                        });
+
+                return Map.of(
+                        "success", true,
+                        "message", "视频上传成功，正在自动分析帧...",
+                        "taskId", taskId,
+                        "mode", "AUTO_ANALYZE",
+                        "statusUrl", "/api/violation-detection/task-status/" + taskId,
+                        "note", "使用statusUrl查询分析进度和结果");
+            } else {
+                // 手动模式：仅上传视频
+                String videoUrl = videoDetectionService.uploadVideoFile(videoFile, intersectionId);
+
+                return Map.of(
+                        "success", true,
+                        "message", "视频上传成功",
+                        "videoUrl", videoUrl,
+                        "taskId", taskId,
+                        "mode", "MANUAL",
+                        "note", "请调用你的大模型分析此视频，然后通过detect-frame接口上报检测结果");
+            }
+        } catch (Exception e) {
+            return Map.of(
+                    "success", false,
+                    "message", "视频上传失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 查询视频分析任务状态
+     */
+    @GetMapping("/task-status/{taskId}")
+    public Map<String, Object> getTaskStatus(@PathVariable String taskId) {
+        return videoTaskStatusService.getTaskStatus(taskId);
+    }
+
+    /**
+     * 图片上传并检测违章
+     * 支持直接上传图片进行违章检测
+     */
+    @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> uploadImageAndDetect(
+            @RequestParam("image") MultipartFile imageFile,
+            @RequestParam("intersectionId") Long intersectionId,
+            @RequestParam("plateNumber") String plateNumber,
+            @RequestParam("violationType") String violationType,
+            @RequestParam(value = "aiConfidence", defaultValue = "0.95") Float aiConfidence,
+            @RequestParam(value = "cameraId", required = false) String cameraId) {
+
+        try {
+            // 上传图片到MinIO
+            String imageUrl = videoDetectionService.uploadViolationImage(imageFile, intersectionId);
+
+            // 构建检测数据
+            Map<String, Object> detectionData = Map.of(
+                    "intersectionId", intersectionId,
+                    "plateNumber", plateNumber,
+                    "violationType", violationType,
+                    "imageUrl", imageUrl,
+                    "confidence", aiConfidence,
+                    "cameraId", cameraId != null ? cameraId : "upload");
+
+            // 处理检测结果（包含红绿灯验证）
+            var savedViolation = videoDetectionService.processDetectionResult(detectionData);
+
+            return Map.of(
+                    "success", true,
+                    "violationId", savedViolation.getId(),
+                    "imageUrl", imageUrl,
+                    "violationType", savedViolation.getViolationType().toString(),
+                    "lightState", trafficLightStateService.getCurrentLightState(
+                            intersectionId, savedViolation.getOccurredAt()).toString(),
+                    "message", "图片上传并检测完成");
+        } catch (IllegalArgumentException e) {
+            return Map.of(
+                    "success", false,
+                    "message", e.getMessage(),
+                    "reason", "当前红绿灯状态下不构成违章");
+        } catch (Exception e) {
+            return Map.of(
+                    "success", false,
+                    "message", "处理失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 模拟红绿灯状态（测试用）
+     */
+    @PostMapping("/simulate-light")
+    public Map<String, Object> simulateTrafficLight(
+            @RequestParam("intersectionId") Long intersectionId,
+            @RequestParam("lightState") String lightState,
+            @RequestParam(value = "duration", defaultValue = "60") int durationSeconds) {
+
+        try {
+            TrafficLightStateService.LightState state = TrafficLightStateService.LightState
+                    .valueOf(lightState.toUpperCase());
+            trafficLightStateService.simulateLightState(intersectionId, state, durationSeconds);
+
+            return Map.of(
+                    "success", true,
+                    "message", String.format("路口%d已设置为%s状态，持续%d秒", intersectionId, lightState, durationSeconds));
+        } catch (IllegalArgumentException e) {
+            return Map.of(
+                    "success", false,
+                    "message",
+                    "无效的灯色状态，支持: RED, YELLOW, GREEN, STRAIGHT_RED, STRAIGHT_YELLOW, STRAIGHT_GREEN, TURN_RED, TURN_YELLOW, TURN_GREEN");
+        }
+    }
+
+    /**
+     * 查询当前红绿灯状态
+     */
+    @GetMapping("/light-state/{intersectionId}")
+    public Map<String, Object> getCurrentLightState(@PathVariable Long intersectionId) {
+        TrafficLightStateService.LightState currentState = trafficLightStateService.getCurrentLightState(intersectionId,
+                LocalDateTime.now());
+
+        return Map.of(
+                "intersectionId", intersectionId,
+                "lightState", currentState.toString(),
+                "timestamp", LocalDateTime.now().toString());
+    }
+}

@@ -94,7 +94,7 @@ public class SignalService {
             // 缓存未命中，从数据库查询
             config = signalConfigRepository.findByIntersectionId(intersectionId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.SIGNAL_CONFIG_NOT_FOUND));
-            
+
             // 写入缓存
             redisTemplate.opsForValue().set(cacheKey, config, SIGNAL_CACHE_TTL, TimeUnit.MINUTES);
         }
@@ -107,7 +107,7 @@ public class SignalService {
      */
     public List<SignalConfigResponse> getAllSignalConfigs() {
         List<SignalConfig> configs = signalConfigRepository.findAll();
-        
+
         return configs.stream()
                 .map(this::buildResponse)
                 .collect(Collectors.toList());
@@ -125,6 +125,12 @@ public class SignalService {
                 .greenDuration(config.getGreenDuration())
                 .redDuration(config.getRedDuration())
                 .yellowDuration(config.getYellowDuration())
+                .straightRedDuration(config.getStraightRedDuration())
+                .straightYellowDuration(config.getStraightYellowDuration())
+                .straightGreenDuration(config.getStraightGreenDuration())
+                .turnRedDuration(config.getTurnRedDuration())
+                .turnYellowDuration(config.getTurnYellowDuration())
+                .turnGreenDuration(config.getTurnGreenDuration())
                 .phaseRemaining(config.getPhaseRemaining())
                 .cycleTime(config.getCycleTime())
                 .lastAdjustedAt(config.getLastAdjustedAt())
@@ -147,11 +153,12 @@ public class SignalService {
     /**
      * 保存信号灯日志
      */
-    private void saveSignalLog(Long intersectionId, Map<String, Object> oldConfig, 
-                               Map<String, Object> newConfig, Long operatorId, String reason) {
+    private void saveSignalLog(Long intersectionId, Map<String, Object> oldConfig,
+            Map<String, Object> newConfig, Long operatorId, String reason) {
         SignalLog log = SignalLog.builder()
                 .intersectionId(intersectionId)
-                .actionType(operatorId != null ? SignalLog.ActionType.MANUAL_OVERRIDE : SignalLog.ActionType.AUTO_ADJUST)
+                .actionType(
+                        operatorId != null ? SignalLog.ActionType.MANUAL_OVERRIDE : SignalLog.ActionType.AUTO_ADJUST)
                 .oldConfig(oldConfig.isEmpty() ? null : oldConfig)
                 .newConfig(newConfig)
                 .operatorId(operatorId)

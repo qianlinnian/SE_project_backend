@@ -36,3 +36,21 @@ Desktop.ini
 # Secrets and Environment variables
 .env
 *.key
+
+# AI Detection Data and Violations
+/ai_detection/output/
+/ai_detection/*.pt
+/ai_detection/temp_videos
+/ai_detection/*.json
+/ai_detection/*.mp4
+/ai_detection/*.avi
+/ai_detection/*.mov
+/ai_detection/*.flv
+/ai_detection/*.wmv
+/ai_detection/*.mkv
+/ai_detection/*.m4v
+/ai_detection/*.m4a
+**/__pycache__/
+.claude
+*.mp4
+*.png
