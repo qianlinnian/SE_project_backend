@@ -60,7 +60,9 @@ public class SecurityConfig {
                                 "/api/dashboard/**", "/api/violations/**",
                                 "/api/ai-integration/**", "/api/violation-detection/**",
                                 "/api/multi-direction-traffic/**", "/api/test/**",
-                                "/api/signals/**")
+                                "/api/signals/**",
+                                // 新增：允许 LLM 推送交通数据和访问系统状态
+                                "/api/traffic/**", "/api/system/**")
                         .permitAll()
                         // 其他所有请求需要认证
                         .anyRequest().authenticated())
