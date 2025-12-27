@@ -148,4 +148,3 @@ Remove-Item -Recurse -Force mysql/data
 
 # 重新启动（会自动初始化）
 docker-compose up -d
-```
