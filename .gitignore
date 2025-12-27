@@ -63,7 +63,7 @@ yolov8m.pt
 !rois.json
 # ==================== Frontend (不上传到 Git) ====================
 # React + Vite 前端项目 
-
+ai_detection/frontend-examples/
 # Node.js 依赖
 node_modules/
 package-lock.json
