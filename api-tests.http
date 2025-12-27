@@ -686,3 +686,96 @@ Content-Type: {{contentType}}
   "imageUrl": "http://test.jpg",
   "confidence": 0.95
 }
+
+###############################################
+# Module 8: 智能信号灯后端对接 (Module 4 增强)
+# 文档来源: 智能信号灯板块.pdf
+# 说明：包含 LLM 数据推送接收、前端查询及控制指令转发
+###############################################
+
+### 8.1 接收 LLM 推送的实时交通数据 (模拟 LLM 调用)
+# 对应接口: 1.1 接收LLM服务器推送的数据
+# 对应 Controller: TrafficIngestionController
+POST {{baseUrl}}/traffic
+Content-Type: {{contentType}}
+
+{
+  "timestamp": 120.5,
+  "step": 105,
+  "roadnet": "Hangzhou-4_4",
+  "trafficflow": "anon_4_4_hangzhou_real",
+  "control_mode": "ai",
+  "total_intersections": 1,
+  "intersections": [
+    {
+      "id": 0,
+      "signal_phase": "ETWT",
+      "phase_code": 0,
+      "queue_length": 12,
+      "vehicle_count": 25,
+      "lanes": {
+        "NT": { "cells": [1, 2, 0, 0], "queue_len": 3 },
+        "NL": { "cells": [0, 1, 0, 0], "queue_len": 1 },
+        "ST": { "cells": [2, 1, 0, 0], "queue_len": 2 },
+        "SL": { "cells": [0, 0, 0, 0], "queue_len": 0 },
+        "ET": { "cells": [1, 0, 1, 0], "queue_len": 1 },
+        "EL": { "cells": [0, 0, 0, 0], "queue_len": 0 },
+        "WT": { "cells": [0, 1, 0, 0], "queue_len": 1 },
+        "WL": { "cells": [0, 0, 0, 0], "queue_len": 0 }
+      }
+    }
+  ]
+}
+
+### 8.2 前端获取最新交通数据 (实时轮询用)
+# 对应接口: 1.2 前端获取最新交通数据
+# 对应 Controller: TrafficQueryController
+# 说明：此数据来自 Redis 缓存
+GET {{baseUrl}}/traffic/latest
+Authorization: Bearer {{token}}
+
+### 8.3 前端获取交通数据历史记录 (图表展示用)
+# 对应接口: 1.3 获取交通数据历史记录
+# 对应 Controller: TrafficQueryController
+# 说明：数据来自 MySQL 全量历史表 traffic_flow_records
+GET {{baseUrl}}/traffic/history?limit=20
+Authorization: Bearer {{token}}
+
+### 8.4 切换控制模式 (前端 -> 后端 -> LLM)
+# 对应接口: 2.1 切换控制模式
+# 对应 Controller: SignalControlController
+# 逻辑：1.转发给LLM 2.更新本地数据库 3.WebSocket广播
+# 可选值: "ai", "fixed"
+POST {{baseUrl}}/control/mode
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "mode": "fixed"
+}
+
+### 8.5 设置固定配时周期 (前端 -> 后端 -> LLM)
+# 对应接口: 2.2 设置固定配时周期
+# 对应 Controller: SignalControlController
+# 说明：仅在 fixed 模式下有效，时长范围 10-120 秒
+POST {{baseUrl}}/control/fixed-duration
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "duration": 60
+}
+
+### 8.6 获取当前控制状态
+# 对应接口: 2.3 获取当前控制状态
+# 对应 Controller: SignalControlController
+# 说明：返回真实的 DB 配置状态和 LLM 连接状态
+GET {{baseUrl}}/control/status
+Authorization: Bearer {{token}}
+
+### 8.7 获取系统整体状态
+# 对应接口: 3.1 获取系统状态
+# 对应 Controller: SystemStatusController
+# 说明：返回后端运行时间、LLM 连接状态、最后一次数据接收时间
+GET {{baseUrl}}/system/status
+Authorization: Bearer {{token}}
