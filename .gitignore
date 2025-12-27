@@ -59,7 +59,8 @@ Desktop.ini
 *.json
 yolov8s.pt
 yolov8m.pt
-
+!rois2.json
+!rois.json
 # ==================== Frontend (不上传到 Git) ====================
 # React + Vite 前端项目 
 
