@@ -148,3 +148,163 @@ Remove-Item -Recurse -Force mysql/data
 
 # 重新启动（会自动初始化）
 docker-compose up -d
+
+```
+SE_project_backend
+├─ ai_detection
+│  ├─ api
+│  │  ├─ ai_realtime_service.py
+│  │  ├─ backend_api_client.py
+│  │  └─ detection_api.py
+│  ├─ core
+│  │  ├─ image_violation_detector.py
+│  │  ├─ vehicle_tracker.py
+│  │  └─ violation_detector.py
+│  ├─ data
+│  ├─ main_pipeline.py
+│  ├─ PYTHON_FILES.md
+│  ├─ README.md
+│  ├─ requirements.txt
+│  ├─ scripts
+│  │  ├─ main_pipeline_manual.py
+│  │  ├─ manual_signal_controller.py
+│  │  ├─ test_backend_integration.py
+│  │  ├─ test_flask_api.py
+│  │  ├─ test_image.py
+│  │  ├─ test_realtime_service.py
+│  │  ├─ test_yolo_simple.py
+│  │  └─ visualize_detection.py
+│  └─ tools
+│     ├─ roi_labeler.py
+│     ├─ roi_visualizer.py
+│     ├─ signal_adapter.py
+│     └─ video_rotator.py
+├─ api-tests.http
+├─ com
+│  └─ traffic
+│     └─ management
+│        └─ util
+│           └─ PasswordTest.java
+├─ docker-compose.yml
+├─ docs
+│  ├─ api_traffic_violation_en.md
+│  ├─ diagrams
+│  │  ├─ traffic-monitor-architecture.mmd
+│  │  ├─ traffic-monitor-class.mmd
+│  │  ├─ traffic-monitor-sequence.mmd
+│  │  ├─ violation-architecture.mmd
+│  │  └─ violation-class.mmd
+│  ├─ ER_diagram.md
+│  ├─ schema_notes.md
+│  └─ 智能交通管理系统 - 接口与功能说明文档.pdf
+├─ minio
+├─ mysql
+│  └─ init
+│     ├─ 01-schema.sql
+│     ├─ 02-indices.sql
+│     ├─ 03-seed-data.sql
+│     ├─ 04-functions.sql
+│     ├─ 05-signal-tables.sql
+│     ├─ 06-signal-upgrade.sql
+│     ├─ 07-multi-direction-upgrade.sql
+│     ├─ 08-video-analysis-tasks.sql
+│     └─ 09-add-violation-types.sql
+├─ pom.xml
+├─ postman_collection.json
+├─ README.md
+├─ redis
+└─ src
+   └─ main
+      ├─ java
+      │  └─ com
+      │     └─ traffic
+      │        └─ management
+      │           ├─ config
+      │           │  ├─ AppConfig.java
+      │           │  ├─ AsyncConfig.java
+      │           │  ├─ CorsConfig.java
+      │           │  ├─ JacksonConfig.java
+      │           │  ├─ MinioConfig.java
+      │           │  ├─ RedisConfig.java
+      │           │  ├─ SecurityConfig.java
+      │           │  └─ WebSocketConfig.java
+      │           ├─ controller
+      │           │  ├─ AdminController.java
+      │           │  ├─ AIIntegrationController.java
+      │           │  ├─ AuthController.java
+      │           │  ├─ FileController.java
+      │           │  ├─ HealthController.java
+      │           │  ├─ ImageDetectionController.java
+      │           │  ├─ MultiDirectionTrafficController.java
+      │           │  ├─ RedisTestController.java
+      │           │  ├─ SignalController.java
+      │           │  ├─ TestController.java
+      │           │  ├─ TrafficMonitorController.java
+      │           │  ├─ VideoDetectionController.java.temp
+      │           │  ├─ ViolationController.java
+      │           │  └─ ViolationDetectionController.java
+      │           ├─ dto
+      │           │  ├─ request
+      │           │  │  ├─ LoginRequest.java
+      │           │  │  ├─ PoliceCreateRequest.java
+      │           │  │  ├─ SignalAdjustRequest.java
+      │           │  │  └─ UserStatusUpdateRequest.java
+      │           │  └─ response
+      │           │     ├─ ApiResponse.java
+      │           │     ├─ LoginResponse.java
+      │           │     ├─ PageResponse.java
+      │           │     └─ SignalConfigResponse.java
+      │           ├─ entity
+      │           │  ├─ AiDetectionResult.java
+      │           │  ├─ Intersection.java
+      │           │  ├─ IntersectionDirection.java
+      │           │  ├─ SignalConfig.java
+      │           │  ├─ SignalLog.java
+      │           │  ├─ TrafficPhase.java
+      │           │  ├─ User.java
+      │           │  ├─ VideoAnalysisTask.java
+      │           │  └─ Violation.java
+      │           ├─ exception
+      │           │  ├─ BusinessException.java
+      │           │  ├─ ErrorCode.java
+      │           │  └─ GlobalExceptionHandler.java
+      │           ├─ handler
+      │           │  └─ AlertWebSocketHandler.java
+      │           ├─ repository
+      │           │  ├─ AiDetectionResultRepository.java
+      │           │  ├─ IntersectionDirectionRepository.java
+      │           │  ├─ IntersectionRepository.java
+      │           │  ├─ SignalConfigRepository.java
+      │           │  ├─ SignalLogRepository.java
+      │           │  ├─ TrafficPhaseRepository.java
+      │           │  ├─ UserRepository.java
+      │           │  ├─ VideoAnalysisTaskRepository.java
+      │           │  └─ ViolationRepository.java
+      │           ├─ security
+      │           │  ├─ JwtAuthenticationFilter.java
+      │           │  └─ JwtTokenProvider.java
+      │           ├─ service
+      │           │  ├─ AIIntegrationService.java
+      │           │  ├─ AuthService.java
+      │           │  ├─ MultiDirectionTrafficLightService.java
+      │           │  ├─ NotificationService.java
+      │           │  ├─ RedisService.java
+      │           │  ├─ SignalService.java
+      │           │  ├─ TaskScheduleService.java
+      │           │  ├─ TaskStatusService.java
+      │           │  ├─ TrafficLightStateService.java
+      │           │  ├─ UserInitializationService.java
+      │           │  ├─ UserService.java
+      │           │  ├─ VideoDetectionService.java
+      │           │  ├─ VideoFrameAnalysisService.java
+      │           │  ├─ VideoTaskStatusService.java
+      │           │  └─ ViolationService.java
+      │           ├─ TrafficManagementApplication.java
+      │           └─ util
+      │              ├─ PasswordGeneratorUtil.java
+      │              └─ PasswordVerifyUtil.java
+      └─ resources
+         ├─ application.properties
+         └─ logback-spring.xml
+
+```
