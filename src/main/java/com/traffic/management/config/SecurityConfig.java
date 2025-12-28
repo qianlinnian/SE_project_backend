@@ -62,7 +62,9 @@ public class SecurityConfig {
                                 "/api/multi-direction-traffic/**", "/api/test/**",
                                 "/api/signals/**",
                                 // 新增：允许 LLM 推送交通数据和访问系统状态
-                                "/api/traffic/**", "/api/system/**")
+                                "/api/traffic/**", "/api/system/**",
+                                // Spring Boot Actuator 健康检查端点
+                                "/actuator/health", "/actuator/health/**")
                         .permitAll()
                         // 其他所有请求需要认证
                         .anyRequest().authenticated())
