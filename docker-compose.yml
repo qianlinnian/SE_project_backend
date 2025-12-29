@@ -124,6 +124,7 @@ services:
       # 后端API地址（容器内网络）
       - BACKEND_API_URL=http://backend:8081/api
       - BACKEND_BASE_URL=http://backend:8081/api
+      - MINIO_ENDPOINT=http://minio:9000
       # 路口ID
       - INTERSECTION_ID=1
       # Python 配置
@@ -166,6 +167,7 @@ services:
 
       # AI 服务配置
       - AI_SERVICE_BASE_URL=http://ai-service:5000
+      - AI_SERVICE_URL=http://ai-service:5000
 
       # 文件存储配置
       - FILE_UPLOAD_BASE_PATH=/app/uploads

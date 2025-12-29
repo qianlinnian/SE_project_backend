@@ -34,7 +34,7 @@ public class AIIntegrationService {
     private TaskStatusService taskStatusService;
 
     // AI服务配置
-    @Value("${ai.service.base-url:http://localhost:5000}")
+    @Value("${ai.service.base-url:http://ai-service:5000}")
     private String aiServiceBaseUrl;
 
     @Value("${ai.service.analyze-endpoint:/analyze-video}")
@@ -52,7 +52,7 @@ public class AIIntegrationService {
     @Value("${ai.service.retry.delay:10}")
     private int retryDelaySeconds;
 
-    @Value("${server.callback.base-url:http://localhost:8088}")
+    @Value("${server.callback.base-url:http://47.107.50.136:8081}")
     private String callbackBaseUrl;
 
     @Value("${server.callback.ai-result-path:/api/violation-detection/ai-callback}")

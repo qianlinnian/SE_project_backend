@@ -14,8 +14,8 @@ AI 实时检测服务 - TrafficMind 交通智脑
     pip install flask flask-socketio flask-cors requests
     python api/ai_realtime_service.py
 
-服务地址: http://localhost:5000
-WebSocket: ws://localhost:5000
+服务地址: http://47.107.50.136 :5000
+WebSocket: ws://47.107.50.136 :5000
 """
 
 import os
@@ -66,7 +66,7 @@ from tools.signal_adapter import SignalAdapter
 
 # ==================== 配置 ====================
 BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://47.107.50.136:8081/api")
-MINIO_ENDPOINT = "http://localhost:9000"
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://47.107.50.136:9000")
 ROIS_PATH = str(_AI_DETECTION_PATH / "data" / "rois.json")
 MODEL_PATH = str(_AI_DETECTION_PATH / "yolov8s.pt")  # Small 模型，更准确
 TEMP_VIDEO_DIR = str(_AI_DETECTION_PATH / "temp_videos")
@@ -1642,8 +1642,8 @@ if __name__ == '__main__':
     print("\n" + "=" * 60)
     print(" TrafficMind AI 实时检测服务")
     print("=" * 60)
-    print(f"📍 HTTP API:    http://localhost:5000")
-    print(f"📍 WebSocket:   ws://localhost:5000")
+    print(f"📍 HTTP API:    http://47.107.50.136 :5000")
+    print(f"📍 WebSocket:   ws://47.107.50.136 :5000")
     print("=" * 60)
     print("📡 API 端点 - 视频流检测:")
     print(f"   POST /start-realtime   - 启动实时处理任务")

@@ -8,19 +8,25 @@ from typing import Dict, Optional
 from datetime import datetime
 
 
+import os
+
+# 从环境变量读取后端地址，默认使用服务器地址
+DEFAULT_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://47.107.50.136:8081/api")
+
+
 class BackendAPIClient:
     """后端API客户端"""
 
-    def __init__(self, base_url: str = "http://localhost:8081/api", username: str = "police001", password: str = "password123"):
+    def __init__(self, base_url: str = None, username: str = "police001", password: str = "password123"):
         """
         初始化API客户端
 
         Args:
-            base_url: 后端API基础URL，默认为本地开发环境
+            base_url: 后端API基础URL，默认为环境变量 BACKEND_BASE_URL
             username: 登录用户名，默认为 police001
             password: 登录密码，默认为 password123
         """
-        self.base_url = base_url
+        self.base_url = base_url or DEFAULT_BASE_URL
         self.username = username
         self.password = password
         self.jwt_token = None
@@ -280,51 +286,3 @@ class BackendAPIClient:
             print(f"[API] 后端服务不可用: {type(e).__name__}: {e}")
 
         return False
-
-
-# 测试代码
-if __name__ == "__main__":
-    print("=" * 60)
-    print("后端API客户端测试")
-    print("=" * 60)
-
-    # 创建客户端
-    client = BackendAPIClient("http://localhost:8081/api")
-
-    # 1. 健康检查
-    print("\n1. 健康检查...")
-    is_healthy = client.health_check()
-    print(f"   结果: {'✓ 成功' if is_healthy else '✗ 失败'}")
-
-    if not is_healthy:
-        print("\n⚠️  后端服务不可用，请确保后端已启动在 http://localhost:8080")
-        exit(1)
-
-    # 2. 获取信号灯状态
-    print("\n2. 获取信号灯状态...")
-    status = client.get_signal_status(1, 'SOUTH', 'STRAIGHT')
-    print(f"   南向直行信号灯: {status}")
-
-    # 3. 验证违章
-    print("\n3. 验证违章是否成立...")
-    is_violation = client.validate_violation(1, 'SOUTH', 'STRAIGHT', 'RED_LIGHT')
-    print(f"   闯红灯违章: {is_violation}")
-
-    # 4. 上报违章
-    print("\n4. 上报违章...")
-    test_violation = {
-        'intersectionId': 1,
-        'direction': 'SOUTH',
-        'turnType': 'STRAIGHT',
-        'plateNumber': '京A12345',
-        'violationType': 'RED_LIGHT',
-        'imageUrl': 'file:///test/violation_001.jpg',
-        'aiConfidence': 0.95,
-        'occurredAt': datetime.now().isoformat()
-    }
-    violation_id = client.report_violation(test_violation)
-    print(f"   违章ID: {violation_id}")
-
-    print("\n" + "=" * 60)
-    print("测试完成!")
-    print("=" * 60)

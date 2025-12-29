@@ -19,7 +19,9 @@ import java.util.*;
 @RequestMapping("/api/image-detection")
 public class ImageDetectionController {
 
-    private static final String AI_SERVICE_URL = "http://localhost:5000";
+    private static final String AI_SERVICE_URL = System.getenv("AI_SERVICE_URL") != null
+            ? System.getenv("AI_SERVICE_URL")
+            : "http://ai-service:5000";
     private final RestTemplate restTemplate = new RestTemplate();
 
     /**
@@ -397,7 +399,10 @@ public class ImageDetectionController {
             }
 
             // 调用后端违规上报接口
-            String reportUrl = "http://localhost:8081/api/violations/report";
+            String baseUrl = System.getenv("SERVER_BASE_URL") != null
+                    ? System.getenv("SERVER_BASE_URL")
+                    : "http://backend:8081";
+            String reportUrl = baseUrl + "/api/violations/report";
 
             for (Map<String, Object> violation : violations) {
                 try {

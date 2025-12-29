@@ -104,7 +104,7 @@ class ViolationDetector:
                 )
                 # 测试连接
                 if self.api_client.health_check():
-                    print("[API] 后端连接成功，违规将自动上报到 http://localhost:8081")
+                    print(f"[API] 后端连接成功，违规将自动上报到 {self.api_client.base_url}")
                 else:
                     print("[API] ⚠️ 后端连接失败，将只记录本地违规")
                     self.enable_api = False
