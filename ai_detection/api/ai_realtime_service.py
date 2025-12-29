@@ -65,8 +65,10 @@ from core.vehicle_tracker import VehicleTracker
 from tools.signal_adapter import SignalAdapter
 
 # ==================== 配置 ====================
-BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://47.107.50.136:8081/api")
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://47.107.50.136:9000")
+# 容器内使用服务名（backend），容器外使用服务器IP
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://backend:8081/api")
+# MinIO 也使用容器内服务名
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
 ROIS_PATH = str(_AI_DETECTION_PATH / "data" / "rois.json")
 MODEL_PATH = str(_AI_DETECTION_PATH / "yolov8s.pt")  # Small 模型，更准确
 TEMP_VIDEO_DIR = str(_AI_DETECTION_PATH / "temp_videos")
@@ -1256,6 +1258,17 @@ def get_image_detector():
     if _image_detector is None:
         try:
             from core.image_violation_detector import ImageViolationDetector
+
+            # 检查必要文件是否存在
+            if not os.path.exists(ROIS_PATH):
+                raise FileNotFoundError(f"ROI配置文件不存在: {ROIS_PATH}")
+            if not os.path.exists(MODEL_PATH):
+                raise FileNotFoundError(f"YOLO模型文件不存在: {MODEL_PATH}")
+
+            print(f"[图片检测] 正在初始化...")
+            print(f"[图片检测] - ROI配置: {ROIS_PATH}")
+            print(f"[图片检测] - YOLO模型: {MODEL_PATH}")
+
             _image_detector = ImageViolationDetector(
                 rois_path=ROIS_PATH,
                 model_path=MODEL_PATH,
@@ -1263,9 +1276,10 @@ def get_image_detector():
                 intersection_id=1,
                 enable_api=True
             )
-            print("[图片检测] 图片检测器初始化成功")
+            print("[图片检测] ✅ 图片检测器初始化成功")
         except Exception as e:
-            print(f"[图片检测] 初始化失败: {e}")
+            print(f"[图片检测] ❌ 初始化失败: {type(e).__name__}: {e}")
+            traceback.print_exc()
             return None
     return _image_detector
 

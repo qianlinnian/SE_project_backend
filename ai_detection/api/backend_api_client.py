@@ -10,8 +10,9 @@ from datetime import datetime
 
 import os
 
-# 从环境变量读取后端地址，默认使用服务器地址
-DEFAULT_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://47.107.50.136:8081/api")
+# 从环境变量读取后端地址
+# 容器内使用服务名（backend），容器外使用服务器IP
+DEFAULT_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://backend:8081/api")
 
 
 class BackendAPIClient:

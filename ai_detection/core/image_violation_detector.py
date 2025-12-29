@@ -59,7 +59,8 @@ class ImageViolationDetector:
 
         if enable_api:
             try:
-                from backend_api_client import BackendAPIClient
+                # 修复导入路径：使用相对导入从上级目录的api模块导入
+                from api.backend_api_client import BackendAPIClient
                 self.api_client = BackendAPIClient()
                 if self.api_client.health_check():
                     print("[API]  后端连接成功")
@@ -68,6 +69,8 @@ class ImageViolationDetector:
                     self.enable_api = False
             except Exception as e:
                 print(f"[API] API客户端初始化失败: {e}")
+                import traceback
+                traceback.print_exc()
                 self.enable_api = False
 
     def detect_vehicles(self, image, conf_threshold=0.15, debug=False):
