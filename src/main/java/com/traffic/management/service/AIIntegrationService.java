@@ -52,7 +52,8 @@ public class AIIntegrationService {
     @Value("${ai.service.retry.delay:10}")
     private int retryDelaySeconds;
 
-    @Value("${server.callback.base-url:http://47.107.50.136:8081}")
+    // AI服务在容器内回调后端，使用容器内服务名
+    @Value("${server.callback.base-url:http://backend:8081}")
     private String callbackBaseUrl;
 
     @Value("${server.callback.ai-result-path:/api/violation-detection/ai-callback}")
