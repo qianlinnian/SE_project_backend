@@ -169,7 +169,7 @@ services:
 
       # 文件存储配置
       - FILE_UPLOAD_BASE_PATH=/app/uploads
-      - FILE_URL_BASE_URL=http://localhost:8081/api/files
+      - FILE_URL_BASE_URL=http://47.107.50.136:8081/api/files
 
       # JVM 配置
       - JAVA_OPTS=-Xms512m -Xmx2g -XX:+UseG1GC

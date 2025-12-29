@@ -65,7 +65,7 @@ from core.vehicle_tracker import VehicleTracker
 from tools.signal_adapter import SignalAdapter
 
 # ==================== 配置 ====================
-BACKEND_BASE_URL = "http://localhost:8081/api"
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://47.107.50.136:8081/api")
 MINIO_ENDPOINT = "http://localhost:9000"
 ROIS_PATH = str(_AI_DETECTION_PATH / "data" / "rois.json")
 MODEL_PATH = str(_AI_DETECTION_PATH / "yolov8s.pt")  # Small 模型，更准确
@@ -1071,7 +1071,10 @@ def process_video_realtime(task_id: str, video_url: str, video_path: str,
                         # 从完整路径中提取文件名
                         screenshot_path = Path(v['screenshot'])
                         filename = screenshot_path.name
-                        v['screenshotUrl'] = f"http://localhost:5000/screenshots/{filename}"
+                        # 使用环境变量中的服务器地址，如果没有则使用默认值
+                        server_host = os.environ.get('AI_SERVICE_HOST', '47.107.50.136')
+                        server_port = os.environ.get('AI_SERVICE_PORT', '5000')
+                        v['screenshotUrl'] = f"http://{server_host}:{server_port}/screenshots/{filename}"
 
                     violations_detected.append(v)
 
