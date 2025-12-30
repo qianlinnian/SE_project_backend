@@ -48,29 +48,47 @@ echo ""
 echo "⏹️  3. 停止现有服务..."
 docker-compose down
 
-# 5. 重新构建镜像
+# 5. 配置 Docker 构建加速（可选）
 echo ""
-echo "🔨 4. 重新构建镜像..."
-docker-compose build
+echo "⚡ 4. 配置 Docker 构建加速..."
 
-# 6. 启动服务
+# 检查并配置 Docker 镜像加速
+if [ -f "/etc/docker/daemon.json" ]; then
+    echo "   ℹ️  Docker 配置已存在"
+else
+    echo "   ⚠️  建议配置 Docker Hub 镜像加速"
+    echo "      参考: https://developer.aliyun.com/mirror/docker-ce"
+fi
+
+# 设置构建参数（使用 BuildKit 加速）
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
+echo "   ✅ BuildKit 已启用"
+
+# 6. 重新构建镜像
 echo ""
-echo "🚀 5. 启动服务..."
+echo "🔨 5. 重新构建镜像..."
+docker-compose build --no-cache
+
+# 7. 启动服务
+echo ""
+echo "🚀 6. 启动服务..."
 docker-compose up -d
 
-# 7. 等待服务就绪
+# 8. 等待服务就绪
 echo ""
-echo "⏳ 6. 等待服务启动..."
+echo "⏳ 7. 等待服务启动..."
 sleep 10
 
-# 8. 显示服务状态
+# 9. 显示服务状态
 echo ""
-echo "📊 7. 服务状态:"
+echo "📊 8. 服务状态:"
 docker-compose ps
 
-# 9. 健康检查
+# 10. 健康检查
 echo ""
-echo "🏥 8. 健康检查:"
+echo "🏥 9. 健康检查:"
 
 # 检查 Backend
 if curl -f http://localhost:8081/actuator/health &>/dev/null; then
