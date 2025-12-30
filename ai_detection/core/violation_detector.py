@@ -37,6 +37,11 @@ class ViolationDetector:
         with open(rois_path, 'r', encoding='utf-8') as f:
             self.rois = json.load(f)
 
+        # 判断配置文件类型（根据文件名）
+        # rois.json: 南北向为竖直 (传统视角)
+        # rois2.json: 东西向为竖直 (旋转90度视角)
+        self.is_rotated_view = 'rois2' in rois_path.lower()
+
         # 计算路口中心点（用于判断车辆进入/离开路口）
         self.intersection_center = self._calculate_intersection_center()
 
@@ -720,11 +725,22 @@ class ViolationDetector:
         end_point = trajectory[-1][:2]
         dx = end_point[0] - start_point[0]
         dy = end_point[1] - start_point[1]
-        
-        if abs(dy) > abs(dx):
-            directions_to_check = ['north_bound', 'south_bound']
+
+        # 根据配置文件类型和移动方向确定要检查的车道
+        vehicle_moves_vertically = abs(dy) > abs(dx)
+
+        if self.is_rotated_view:
+            # rois2.json: 东西向为竖直，南北向为水平
+            if vehicle_moves_vertically:
+                directions_to_check = ['west_bound', 'east_bound']
+            else:
+                directions_to_check = ['north_bound', 'south_bound']
         else:
-            directions_to_check = ['west_bound', 'east_bound']
+            # rois.json: 南北向为竖直，东西向为水平（传统）
+            if vehicle_moves_vertically:
+                directions_to_check = ['north_bound', 'south_bound']
+            else:
+                directions_to_check = ['west_bound', 'east_bound']
         
         # 1. 先判断车辆是否在某个车道区域内
         current_direction = None

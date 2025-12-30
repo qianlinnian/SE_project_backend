@@ -19,6 +19,20 @@
       "direction": "north_bound",
       "coordinates": [
         [
+          747,
+          279
+        ],
+        [
+          747,
+          3
+        ]
+      ]
+    },
+    {
+      "name": "north_bound_line_2",
+      "direction": "north_bound",
+      "coordinates": [
+        [
           831,
           66
         ],

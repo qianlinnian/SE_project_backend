@@ -291,4 +291,173 @@ public class ViolationService {
         map.put("updatedAt", violation.getUpdatedAt().toString());
         return map;
     }
+
+    // ========== 统计分析方法 ==========
+
+    /**
+     * 获取统计概览（支持时间范围）
+     */
+    public Map<String, Object> getStatisticsOverview(LocalDateTime startTime, LocalDateTime endTime) {
+        // 计算当前时间段的统计
+        long total = violationRepository.countByOccurredAtBetween(startTime, endTime);
+        long pending = violationRepository.countByStatusAndOccurredAtBetween(
+                Violation.ViolationStatus.PENDING, startTime, endTime);
+        long confirmed = violationRepository.countByStatusAndOccurredAtBetween(
+                Violation.ViolationStatus.CONFIRMED, startTime, endTime);
+        long rejected = violationRepository.countByStatusAndOccurredAtBetween(
+                Violation.ViolationStatus.REJECTED, startTime, endTime);
+
+        // 计算环比增长率（与前一个相同时长的时间段对比）
+        Duration duration = Duration.between(startTime, endTime);
+        LocalDateTime prevStartTime = startTime.minus(duration);
+        LocalDateTime prevEndTime = startTime;
+        long prevTotal = violationRepository.countByOccurredAtBetween(prevStartTime, prevEndTime);
+
+        double growthRate = 0.0;
+        if (prevTotal > 0) {
+            growthRate = ((double) (total - prevTotal) / prevTotal) * 100;
+            growthRate = Math.round(growthRate * 100) / 100.0; // 保留两位小数
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", total);
+        result.put("pending", pending);
+        result.put("confirmed", confirmed);
+        result.put("rejected", rejected);
+        result.put("growthRate", growthRate);
+        return result;
+    }
+
+    /**
+     * 按违规类型统计
+     */
+    public Map<String, Object> getStatisticsByType(LocalDateTime startTime, LocalDateTime endTime) {
+        List<Object[]> results = violationRepository.countByViolationTypeGrouped(startTime, endTime);
+
+        List<Map<String, Object>> data = new ArrayList<>();
+        for (Object[] row : results) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("type", row[0].toString());
+            item.put("typeName", getViolationTypeName(row[0].toString()));
+            item.put("count", ((Number) row[1]).longValue());
+            data.add(item);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("data", data);
+        return result;
+    }
+
+    /**
+     * 获取时间趋势数据
+     */
+    public Map<String, Object> getStatisticsTrend(String granularity, LocalDateTime startTime, LocalDateTime endTime) {
+        List<Object[]> results;
+
+        if ("hour".equalsIgnoreCase(granularity)) {
+            results = violationRepository.countByHourGrouped(startTime, endTime);
+        } else {
+            results = violationRepository.countByDayGrouped(startTime, endTime);
+        }
+
+        List<Map<String, Object>> data = new ArrayList<>();
+        for (Object[] row : results) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("date", row[0].toString());
+            item.put("count", ((Number) row[1]).longValue());
+            data.add(item);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("granularity", granularity);
+        result.put("data", data);
+        return result;
+    }
+
+    /**
+     * 获取热力图数据（小时 × 星期）
+     */
+    public Map<String, Object> getStatisticsHeatmap(LocalDateTime startTime, LocalDateTime endTime) {
+        List<Object[]> results = violationRepository.getHeatmapData(startTime, endTime);
+
+        List<List<Object>> data = new ArrayList<>();
+        for (Object[] row : results) {
+            List<Object> item = new ArrayList<>();
+            int hour = ((Number) row[0]).intValue();
+            int dayOfWeek = ((Number) row[1]).intValue() - 1; // MySQL DAYOFWEEK 1-7，转为 0-6
+            long count = ((Number) row[2]).longValue();
+
+            item.add(hour);      // x: 小时
+            item.add(dayOfWeek); // y: 星期
+            item.add(count);     // value: 数量
+            data.add(item);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("data", data);
+        return result;
+    }
+
+    /**
+     * 获取TOP违规车牌
+     */
+    public Map<String, Object> getTopViolators(int limit, LocalDateTime startTime, LocalDateTime endTime) {
+        org.springframework.data.domain.PageRequest pageRequest =
+            org.springframework.data.domain.PageRequest.of(0, limit);
+        List<Object[]> results = violationRepository.findTopViolators(startTime, endTime, pageRequest);
+
+        // 按车牌号聚合
+        Map<String, Map<String, Object>> violatorMap = new HashMap<>();
+        for (Object[] row : results) {
+            String plateNumber = row[0].toString();
+            long count = ((Number) row[1]).longValue();
+            String type = row[2].toString();
+
+            if (!violatorMap.containsKey(plateNumber)) {
+                Map<String, Object> violator = new HashMap<>();
+                violator.put("plateNumber", plateNumber);
+                violator.put("count", 0L);
+                violator.put("typeBreakdown", new HashMap<String, Long>());
+                violatorMap.put(plateNumber, violator);
+            }
+
+            Map<String, Object> violator = violatorMap.get(plateNumber);
+            violator.put("count", ((Number) violator.get("count")).longValue() + count);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Long> typeBreakdown = (Map<String, Long>) violator.get("typeBreakdown");
+            typeBreakdown.put(type, count);
+        }
+
+        // 转换为列表并排序
+        List<Map<String, Object>> data = new ArrayList<>(violatorMap.values());
+        data.sort((a, b) -> Long.compare(
+            ((Number) b.get("count")).longValue(),
+            ((Number) a.get("count")).longValue()
+        ));
+
+        // 只保留前N个
+        if (data.size() > limit) {
+            data = data.subList(0, limit);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("data", data);
+        return result;
+    }
+
+    /**
+     * 辅助方法：获取违规类型中文名
+     */
+    private String getViolationTypeName(String type) {
+        return switch (type) {
+            case "RED_LIGHT" -> "闯红灯";
+            case "WRONG_WAY" -> "逆行";
+            case "CROSS_SOLID_LINE" -> "跨实线";
+            case "ILLEGAL_TURN" -> "违法转弯";
+            case "SPEEDING" -> "超速";
+            case "PARKING_VIOLATION" -> "违章停车";
+            default -> "其他";
+        };
+    }
 }

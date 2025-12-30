@@ -169,9 +169,9 @@ python scripts/test_image.py --folder violations_images --export output/violatio
 
 **基础视频检测**:
 ```bash
-python scripts/main_pipeline_manual.py --video data/test_video.mp4 --output result.mp4
+python scripts/main_pipeline_manual.py --video data/test_video.mp4 --output result.mp4 --rois ./data/rois.json
 
-python scripts/main_pipeline_manual.py --video data/car_2_cross_wrong_n.mp4 --output result.mp4
+python scripts/main_pipeline_manual.py --video data/car_2_cross_wrong_n.mp4 --output result.mp4 --rois ./data/rois.json
 
 ```
 

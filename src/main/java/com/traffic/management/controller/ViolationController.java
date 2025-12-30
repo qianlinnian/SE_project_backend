@@ -2,9 +2,14 @@ package com.traffic.management.controller;
 
 import com.traffic.management.handler.AlertWebSocketHandler;
 import com.traffic.management.service.ViolationService;
+import com.traffic.management.service.StatisticsSyncService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +22,9 @@ public class ViolationController {
 
     @Autowired
     private AlertWebSocketHandler alertWebSocketHandler;
+
+    @Autowired
+    private StatisticsSyncService statisticsSyncService;
 
     // POST /api/violations/report : 上报违章行为
     @PostMapping("/violations/report")
@@ -70,5 +78,117 @@ public class ViolationController {
     @GetMapping("/violations/count")
     public Map<String, Object> getViolationCount() {
         return Map.of("count", violationService.getViolationCount());
+    }
+
+    // ========== 统计分析 API ==========
+
+    /**
+     * 获取统计概览
+     * GET /api/violations/statistics/overview
+     */
+    @GetMapping("/violations/statistics/overview")
+    public Map<String, Object> getStatisticsOverview(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime startTime = getStartDateTime(startDate);
+        LocalDateTime endTime = getEndDateTime(endDate);
+
+        return violationService.getStatisticsOverview(startTime, endTime);
+    }
+
+    /**
+     * 按违规类型统计
+     * GET /api/violations/statistics/by-type
+     */
+    @GetMapping("/violations/statistics/by-type")
+    public Map<String, Object> getStatisticsByType(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime startTime = getStartDateTime(startDate);
+        LocalDateTime endTime = getEndDateTime(endDate);
+
+        return violationService.getStatisticsByType(startTime, endTime);
+    }
+
+    /**
+     * 获取时间趋势
+     * GET /api/violations/statistics/trend
+     */
+    @GetMapping("/violations/statistics/trend")
+    public Map<String, Object> getStatisticsTrend(
+            @RequestParam(defaultValue = "day") String granularity,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime startTime = getStartDateTime(startDate);
+        LocalDateTime endTime = getEndDateTime(endDate);
+
+        return violationService.getStatisticsTrend(granularity, startTime, endTime);
+    }
+
+    /**
+     * 获取热力图数据
+     * GET /api/violations/statistics/heatmap
+     */
+    @GetMapping("/violations/statistics/heatmap")
+    public Map<String, Object> getStatisticsHeatmap(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime startTime = getStartDateTime(startDate);
+        LocalDateTime endTime = getEndDateTime(endDate);
+
+        return violationService.getStatisticsHeatmap(startTime, endTime);
+    }
+
+    /**
+     * 获取TOP违规车牌
+     * GET /api/violations/statistics/top-violators
+     */
+    @GetMapping("/violations/statistics/top-violators")
+    public Map<String, Object> getTopViolators(
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime startTime = getStartDateTime(startDate);
+        LocalDateTime endTime = getEndDateTime(endDate);
+
+        return violationService.getTopViolators(limit, startTime, endTime);
+    }
+
+    /**
+     * 手动触发统计数据同步到Redis
+     * POST /api/violations/statistics/sync
+     *
+     * 用于手动刷新Redis中的统计数据和热力图数据
+     */
+    @PostMapping("/violations/statistics/sync")
+    public Map<String, Object> manualSyncStatistics() {
+        return statisticsSyncService.manualSync();
+    }
+
+    // ========== 辅助方法 ==========
+
+    /**
+     * 获取开始时间（默认30天前）
+     */
+    private LocalDateTime getStartDateTime(LocalDate startDate) {
+        if (startDate == null) {
+            return LocalDateTime.now().minusDays(30).with(LocalTime.MIN);
+        }
+        return startDate.atStartOfDay();
+    }
+
+    /**
+     * 获取结束时间（默认今天）
+     */
+    private LocalDateTime getEndDateTime(LocalDate endDate) {
+        if (endDate == null) {
+            return LocalDateTime.now().with(LocalTime.MAX);
+        }
+        return endDate.atTime(LocalTime.MAX);
     }
 }

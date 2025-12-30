@@ -9,7 +9,7 @@ from datetime import datetime
 # 获取脚本所在目录，然后定位图片
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGE_PATH = os.path.join(SCRIPT_DIR, '..', 'data', 'background.png')
-OUTPUT_JSON = os.path.join(SCRIPT_DIR, '..', 'data', 'rois.json')
+OUTPUT_JSON = os.path.join(SCRIPT_DIR, '..', 'data', 'rois2.json')
 # =======================================
 
 # 全局变量

@@ -19,6 +19,20 @@
       "direction": "west_bound",
       "coordinates": [
         [
+          747,
+          282
+        ],
+        [
+          746,
+          4
+        ]
+      ]
+    },
+    {
+      "name": "west_bound_line_2",
+      "direction": "west_bound",
+      "coordinates": [
+        [
           831,
           66
         ],
