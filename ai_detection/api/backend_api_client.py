@@ -287,3 +287,98 @@ class BackendAPIClient:
             print(f"[API] 后端服务不可用: {type(e).__name__}: {e}")
 
         return False
+
+    def get_llm_traffic_data(self) -> Optional[Dict]:
+        """
+        获取LLM最新交通数据（包含所有路口的实时信息）
+
+        Returns:
+            包含路口信号相位、车道占用等信息的字典，失败返回None
+
+        示例返回数据结构:
+        {
+            "timestamp": 120.0,
+            "step": 4,
+            "roadnet": "Hangzhou-4_4",
+            "control_mode": "ai",
+            "total_intersections": 16,
+            "intersections": [
+                {
+                    "id": 0,
+                    "signal_phase": "ETWT",  # 当前信号相位
+                    "phase_code": 0,
+                    "queue_length": 8,
+                    "vehicle_count": 15,
+                    "lanes": {
+                        "NT": {"cells": [1,2,0,0], "queue_len": 3},
+                        ...
+                    }
+                }
+            ]
+        }
+        """
+        url = f"{self.base_url}/traffic/latest"
+        try:
+            response = self.session.get(url, timeout=3)
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('code') == 200:
+                    data = result.get('data')
+                    if data:
+                        print(f"[API] ✅ 获取LLM交通数据成功 (时间戳: {data.get('timestamp')})")
+                        return data
+                    else:
+                        print(f"[API] ⚠️ LLM交通数据为空（可能LLM还未发送数据）")
+                else:
+                    print(f"[API] ❌ 获取LLM交通数据失败: {result.get('message')}")
+            else:
+                print(f"[API错误] 获取LLM交通数据失败 HTTP {response.status_code}")
+
+        except requests.exceptions.Timeout:
+            print(f"[API超时] 获取LLM交通数据超时")
+        except requests.exceptions.ConnectionError:
+            print(f"[API连接失败] 无法连接到后端服务器: {self.base_url}")
+        except Exception as e:
+            print(f"[API异常] 获取LLM交通数据异常: {type(e).__name__}: {e}")
+
+        return None
+
+    def get_intersection_llm_data(self, intersection_id: int) -> Optional[Dict]:
+        """
+        获取指定路口的LLM实时数据
+
+        Args:
+            intersection_id: 路口ID
+
+        Returns:
+            路口数据字典，失败返回None
+
+        示例返回数据:
+        {
+            "id": 0,
+            "signal_phase": "ETWT",  # 东西直行通行
+            "phase_code": 0,
+            "queue_length": 8,
+            "vehicle_count": 15,
+            "lanes": {
+                "NT": {"cells": [1,2,0,0], "queue_len": 3},  # 北向直行
+                "NL": {"cells": [0,1,0,0], "queue_len": 1},  # 北向左转
+                ...
+            }
+        }
+        """
+        # 先获取完整数据
+        full_data = self.get_llm_traffic_data()
+        if not full_data:
+            return None
+
+        # 从intersections列表中找到对应ID的路口
+        intersections = full_data.get('intersections', [])
+        for intersection in intersections:
+            if intersection.get('id') == intersection_id:
+                print(f"[API] ✅ 获取路口{intersection_id}数据成功 (相位: {intersection.get('signal_phase')})")
+                return intersection
+
+        print(f"[API] ⚠️ 未找到路口ID={intersection_id}的数据")
+        return None

@@ -170,8 +170,8 @@ class ViolationDetector:
             'red_light_running': 'RED_LIGHT',
             'wrong_way_driving': 'WRONG_WAY',
             'lane_change_across_solid_line': 'CROSS_SOLID_LINE',
-            'waiting_area_red_entry': 'ILLEGAL_TURN',
-            'waiting_area_illegal_exit': 'ILLEGAL_TURN'
+            'waiting_area_red_entry': 'WAITING_AREA_RED_ENTRY',
+            'waiting_area_illegal_exit': 'WAITING_AREA_ILLEGAL_EXIT'
         }
         return mapping.get(violation_type, 'OTHER')
 

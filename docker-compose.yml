@@ -121,6 +121,8 @@ services:
       redis:
         condition: service_healthy
     environment:
+      # 时区配置
+      - TZ=${TIMEZONE}
       # 后端API地址（容器内网络）
       - BACKEND_API_URL=http://backend:8081/api
       - BACKEND_BASE_URL=http://backend:8081/api
@@ -153,6 +155,9 @@ services:
       redis:
         condition: service_healthy
     environment:
+      # 时区配置
+      - TZ=${TIMEZONE}
+
       # 数据库配置
       - SPRING_DATASOURCE_URL=jdbc:mysql://traffic-db:3306/${MYSQL_DATABASE}?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
       - SPRING_DATASOURCE_USERNAME=root
@@ -174,7 +179,7 @@ services:
       - FILE_URL_BASE_URL=http://47.107.50.136:8081/api/files
 
       # JVM 配置
-      - JAVA_OPTS=-Xms512m -Xmx2g -XX:+UseG1GC
+      - JAVA_OPTS=-Xms512m -Xmx2g -XX:+UseG1GC -Duser.timezone=Asia/Shanghai
 
       # Spring Profile
       - SPRING_PROFILES_ACTIVE=prod

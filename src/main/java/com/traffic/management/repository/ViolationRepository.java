@@ -47,6 +47,24 @@ public interface ViolationRepository extends JpaRepository<Violation, Long> {
      */
     Page<Violation> findAll(Pageable pageable);
 
+    /**
+     * 按违规类型查询（分页）
+     */
+    Page<Violation> findByViolationType(Violation.ViolationType violationType, Pageable pageable);
+
+    /**
+     * 按车牌号模糊查询（分页）
+     */
+    Page<Violation> findByPlateNumberContaining(String plateNumber, Pageable pageable);
+
+    /**
+     * 按违规类型和车牌号模糊查询（分页）
+     */
+    Page<Violation> findByViolationTypeAndPlateNumberContaining(
+            Violation.ViolationType violationType,
+            String plateNumber,
+            Pageable pageable);
+
     // ========== 统计分析相关查询 ==========
 
     /**

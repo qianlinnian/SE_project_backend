@@ -95,6 +95,8 @@ public class Violation {
         WRONG_WAY, // 逆行
         CROSS_SOLID_LINE, // 跨实线
         ILLEGAL_TURN, // 违法转弯
+        WAITING_AREA_RED_ENTRY, // 待转区红灯进入
+        WAITING_AREA_ILLEGAL_EXIT, // 待转区非法驶离
         SPEEDING, // 超速
         PARKING_VIOLATION, // 违章停车
         OTHER // 其他

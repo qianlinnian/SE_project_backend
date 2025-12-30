@@ -87,7 +87,11 @@ JPEG_QUALITY = 70  # JPEG 压缩质量 (0-100)
 # ==================== 初始化 ====================
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'trafficmind-secret-key'
-CORS(app, origins="*")
+CORS(app,
+     resources={r"/*": {"origins": "*"}},
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # 确保目录存在
@@ -131,13 +135,23 @@ last_source_check_time = None
 
 def fetch_signal_states_from_backend():
     """
-    根据当前模式获取信号灯状态
+    根据当前模式获取信号灯状态（三级降级策略）
+
+    优先级顺序:
+    1. LLM交通数据 (最优) - 从 GET /api/traffic/latest 获取路口信号相位
+    2. Java后端数据 (备选) - 从 /multi-direction-traffic/intersections/1/status 获取
+    3. 时间模拟 (兜底) - 基于系统时间的固定周期模拟
 
     模式说明：
-    - 'auto': 优先从 Java 后端获取，失败时降级到时间模拟
+    - 'auto': 优先LLM → Java后端 → 时间模拟 (三级降级)
     - 'backend': 仅从 Java 后端获取，失败时不更新
     - 'simulation': 仅使用时间模拟，不调用后端
     - 'manual': 手动设置模式，不自动更新
+
+    LLM信号相位映射：
+    - ETWT: 东西直行通行 → east/west=green, north/south=red
+    - NTNL: 南北直行通行 → north/south=green, east/west=red
+    - 等等...
 
     信号灯模拟逻辑（60秒周期）：
     - 0-20秒: 南北直行绿灯 + 南北左转红灯 + 东西直行红灯 + 东西左转红灯
@@ -147,12 +161,6 @@ def fetch_signal_states_from_backend():
     - 46-50秒: 南北左转绿灯
     - 50-53秒: 南北左转黄灯
     - 53-60秒: 等待
-
-    转换为 Python 格式:
-    - north_bound: 直行信号
-    - south_bound: 直行信号
-    - east_bound: 直行信号
-    - west_bound: 直行信号
     """
     global current_signal_states, current_left_turn_signals, signal_source_mode, current_active_source, last_source_check_time
 
@@ -173,7 +181,68 @@ def fetch_signal_states_from_backend():
         _use_time_simulation()
         return True
 
-    # 后端模式或自动模式：尝试从 Java 后端获取
+    # ==================== 第一优先级：尝试从LLM获取 ====================
+    if mode in ['auto']:
+        try:
+            # 导入BackendAPIClient
+            from api.backend_api_client import BackendAPIClient
+
+            # 创建客户端（会自动登录）
+            client = BackendAPIClient(base_url=BACKEND_BASE_URL)
+
+            # 获取路口0的LLM数据
+            llm_data = client.get_intersection_llm_data(intersection_id=0)
+
+            if llm_data:
+                signal_phase = llm_data.get('signal_phase')
+
+                if signal_phase:
+                    # 解析LLM信号相位
+                    new_states, new_left_turns = _parse_llm_signal_phase(signal_phase)
+
+                    if new_states:
+                        state_changed = False
+
+                        # 检查状态是否变化
+                        for direction in new_states:
+                            if current_signal_states.get(direction, '') != new_states[direction]:
+                                state_changed = True
+                            if current_left_turn_signals.get(direction, '') != new_left_turns[direction]:
+                                state_changed = True
+
+                        # 更新信号灯状态
+                        with signal_lock:
+                            current_signal_states.update(new_states)
+                            current_left_turn_signals.update(new_left_turns)
+
+                        # 记录成功使用LLM
+                        current_active_source = 'llm'
+                        last_source_check_time = datetime.now()
+
+                        if state_changed:
+                            print(f"[信号同步] ✅ 从 LLM 获取 (模式: {mode}, 相位: {signal_phase})")
+                            for direction in new_states.keys():
+                                straight = new_states[direction]
+                                left = new_left_turns[direction]
+                                straight_emoji = "🟢" if straight == "green" else "🔴" if straight == "red" else "🟡"
+                                left_emoji = "🟢" if left == "green" else "🔴" if left == "red" else "🟡"
+                                print(f"  {direction}: 直行={straight} {straight_emoji} | 左转={left} {left_emoji}")
+
+                            # 推送给前端
+                            socketio.emit('traffic', {
+                                'signals': convert_to_serializable(current_signal_states.copy()),
+                                'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy()),
+                                'source': 'llm',
+                                'llm_phase': signal_phase
+                            })
+
+                        return True
+
+        except Exception as e:
+            # LLM获取失败，降级到Java后端
+            print(f"[信号同步] ⚠️ LLM数据不可用，降级到Java后端 - {e}")
+
+    # ==================== 第二优先级：尝试从Java后端获取 ====================
     if mode in ['backend', 'auto']:
         try:
             # 尝试调用 Java 后端获取信号灯状态
@@ -230,10 +299,11 @@ def fetch_signal_states_from_backend():
                             left = new_left_turns[direction]
                             straight_emoji = "🟢" if straight == "green" else "🔴" if straight == "red" else "🟡"
                             left_emoji = "🟢" if left == "green" else "🔴" if left == "red" else "🟡"
-                            print(f" {direction}: 直行={straight} {straight_emoji} | 左转={left} {left_emoji}")
+                            print(f"  {direction}: 直行={straight} {straight_emoji} | 左转={left} {left_emoji}")
                         socketio.emit('traffic', {
                             'signals': convert_to_serializable(current_signal_states.copy()),
-                            'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy())
+                            'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy()),
+                            'source': 'backend'
                         })
 
                 return True
@@ -246,9 +316,9 @@ def fetch_signal_states_from_backend():
                 print(f"[信号同步] ❌ Java 后端不可用 (模式: backend) - {e}")
                 return False
             # auto 模式：继续执行下面的模拟逻辑
-            print(f"[信号同步] ⚠️  Java 后端不可用，降级到时间模拟 (模式: auto)")
+            print(f"[信号同步] ⚠️ Java 后端不可用，降级到时间模拟 (模式: auto)")
 
-    # auto 模式且后端失败：使用时间模拟
+    # ==================== 第三优先级：使用时间模拟（兜底） ====================
     if mode == 'auto':
         current_active_source = 'simulation'
         last_source_check_time = datetime.now()
@@ -256,6 +326,97 @@ def fetch_signal_states_from_backend():
         return True
 
     return False
+
+
+def _parse_llm_signal_phase(signal_phase: str):
+    """
+    解析LLM信号相位编码，转换为Python格式的信号灯状态
+
+    Args:
+        signal_phase: LLM信号相位编码 (如 "ETWT", "NSNL")
+            - NT = North Through (北向直行)
+            - NL = North Left (北向左转)
+            - ST = South Through (南向直行)
+            - SL = South Left (南向左转)
+            - ET = East Through (东向直行)
+            - EL = East Left (东向左转)
+            - WT = West Through (西向直行)
+            - WL = West Left (西向左转)
+
+    Returns:
+        (direct_signals, left_turn_signals): 两个字典
+        - direct_signals: 直行信号灯状态
+        - left_turn_signals: 左转信号灯状态
+
+    逻辑说明:
+        LLM的signal_phase只包含绿灯通行的方向，未包含的方向默认为红灯。
+        例如: "ETWT" 表示东西直行绿灯，其他方向红灯。
+    """
+    # 步骤1: 初始化所有方向为红灯（默认状态）
+    direct_signals = {
+        'north_bound': 'red',
+        'south_bound': 'red',
+        'east_bound': 'red',
+        'west_bound': 'red'
+    }
+    left_turn_signals = {
+        'north_bound': 'red',
+        'south_bound': 'red',
+        'east_bound': 'red',
+        'west_bound': 'red'
+    }
+
+    if not signal_phase:
+        return direct_signals, left_turn_signals
+
+    phase = signal_phase.upper()
+
+    # 步骤2: 根据LLM相位编码，设置绿灯方向
+    # 只有phase中包含的方向才设为绿灯，其他保持红灯
+
+    # 直行信号
+    if 'NT' in phase:
+        direct_signals['north_bound'] = 'green'
+    else:
+        direct_signals['north_bound'] = 'red'  # 明确保持红灯
+
+    if 'ST' in phase:
+        direct_signals['south_bound'] = 'green'
+    else:
+        direct_signals['south_bound'] = 'red'
+
+    if 'ET' in phase:
+        direct_signals['east_bound'] = 'green'
+    else:
+        direct_signals['east_bound'] = 'red'
+
+    if 'WT' in phase:
+        direct_signals['west_bound'] = 'green'
+    else:
+        direct_signals['west_bound'] = 'red'
+
+    # 左转信号
+    if 'NL' in phase:
+        left_turn_signals['north_bound'] = 'green'
+    else:
+        left_turn_signals['north_bound'] = 'red'
+
+    if 'SL' in phase:
+        left_turn_signals['south_bound'] = 'green'
+    else:
+        left_turn_signals['south_bound'] = 'red'
+
+    if 'EL' in phase:
+        left_turn_signals['east_bound'] = 'green'
+    else:
+        left_turn_signals['east_bound'] = 'red'
+
+    if 'WL' in phase:
+        left_turn_signals['west_bound'] = 'green'
+    else:
+        left_turn_signals['west_bound'] = 'red'
+
+    return direct_signals, left_turn_signals
 
 
 def _use_time_simulation():
@@ -532,6 +693,92 @@ def receive_traffic_signal():
             "success": False,
             "message": f"设置失败: {str(e)}"
         }), 500
+
+
+@app.route('/signal-mode', methods=['GET', 'POST', 'OPTIONS'])
+def signal_mode():
+    """
+    信号灯数据源模式管理
+
+    GET: 获取当前模式
+    POST: 切换模式
+    OPTIONS: CORS预检请求
+
+    POST请求体格式:
+    {
+        "mode": "auto"  // auto, backend, simulation, manual
+    }
+
+    模式说明:
+    - auto: 优先LLM → Java后端 → 时间模拟 (三级降级, 推荐)
+    - backend: 仅使用Java后端数据
+    - simulation: 仅使用时间模拟
+    - manual: 手动模式，不自动更新
+    """
+    global signal_source_mode
+
+    # 处理OPTIONS预检请求
+    if request.method == 'OPTIONS':
+        response = jsonify({'success': True})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        return response, 200
+
+    # 处理GET请求 - 获取当前模式
+    elif request.method == 'GET':
+        with signal_mode_lock:
+            return jsonify({
+                "success": True,
+                "mode": signal_source_mode,
+                "active_source": current_active_source,
+                "last_update": last_source_check_time.isoformat() if last_source_check_time else None
+            })
+
+    # 处理POST请求 - 切换模式
+    else:  # POST
+        try:
+            data = request.json
+            if not data:
+                return jsonify({
+                    "success": False,
+                    "message": "请求体不能为空"
+                }), 400
+
+            new_mode = data.get('mode', '').lower()
+
+            # 验证模式
+            valid_modes = ['auto', 'backend', 'simulation', 'manual']
+            if new_mode not in valid_modes:
+                return jsonify({
+                    "success": False,
+                    "message": f"无效的模式。可选值: {', '.join(valid_modes)}"
+                }), 400
+
+            # 更新模式
+            with signal_mode_lock:
+                old_mode = signal_source_mode
+                signal_source_mode = new_mode
+
+            print(f"\n[信号灯模式] 切换: {old_mode} → {new_mode}")
+            print(f"  - auto: 优先LLM → Java后端 → 时间模拟 (三级降级)")
+            print(f"  - backend: 仅使用Java后端数据")
+            print(f"  - simulation: 仅使用时间模拟")
+            print(f"  - manual: 手动模式，不自动更新")
+
+            return jsonify({
+                "success": True,
+                "message": f"信号灯模式已切换为: {new_mode}",
+                "old_mode": old_mode,
+                "new_mode": new_mode
+            })
+
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({
+                "success": False,
+                "message": f"切换模式失败: {str(e)}"
+            }), 500
 
 
 @app.route('/api/traffic/status', methods=['GET'])

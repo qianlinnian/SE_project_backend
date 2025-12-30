@@ -146,9 +146,15 @@ public class ViolationService {
     }
 
     /**
-     * 查询违章列表：优先从 Redis 查询，如果没有则从 MySQL 查询
+     * 查询违章列表：支持搜索和类型筛选
      */
-    public List<Map<String, Object>> getViolations(int page, int size) {
+    public List<Map<String, Object>> getViolations(int page, int size, String search, String type) {
+        // 如果有搜索或类型筛选条件，直接查询数据库（不使用Redis缓存）
+        if ((search != null && !search.isEmpty()) || (type != null && !type.isEmpty())) {
+            return getViolationsWithFilter(page, size, search, type);
+        }
+
+        // 无筛选条件时，使用原有的Redis缓存逻辑
         // 1. 尝试从 Redis 获取（最近的数据可能还在缓存中）
         List<Object> cachedViolations = redisTemplate.opsForList().range(VIOLATIONS_LIST_KEY, 0, size - 1);
         if (cachedViolations != null && !cachedViolations.isEmpty()) {
@@ -176,6 +182,45 @@ public class ViolationService {
             redisTemplate.expire(cacheKey, Duration.ofMinutes(CACHE_DURATION_MINUTES));
         }
 
+        return result;
+    }
+
+    /**
+     * 带筛选条件的查询
+     */
+    private List<Map<String, Object>> getViolationsWithFilter(int page, int size, String search, String type) {
+        Pageable pageable = PageRequest.of(page - 1, size);
+        List<Violation> violations;
+
+        if (type != null && !type.isEmpty()) {
+            // 按类型筛选
+            try {
+                Violation.ViolationType violationType = Violation.ViolationType.valueOf(type);
+                if (search != null && !search.isEmpty()) {
+                    // 同时有搜索和类型筛选
+                    violations = violationRepository.findByViolationTypeAndPlateNumberContaining(
+                            violationType, search, pageable).getContent();
+                } else {
+                    // 只有类型筛选
+                    violations = violationRepository.findByViolationType(violationType, pageable).getContent();
+                }
+            } catch (IllegalArgumentException e) {
+                // 类型无效，返回空列表
+                return new ArrayList<>();
+            }
+        } else if (search != null && !search.isEmpty()) {
+            // 只有搜索条件（按车牌号搜索）
+            violations = violationRepository.findByPlateNumberContaining(search, pageable).getContent();
+        } else {
+            // 无筛选条件
+            violations = violationRepository.findAll(pageable).getContent();
+        }
+
+        // 转换为Map
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Violation v : violations) {
+            result.add(convertToMap(v));
+        }
         return result;
     }
 
@@ -455,6 +500,8 @@ public class ViolationService {
             case "WRONG_WAY" -> "逆行";
             case "CROSS_SOLID_LINE" -> "跨实线";
             case "ILLEGAL_TURN" -> "违法转弯";
+            case "WAITING_AREA_RED_ENTRY" -> "待转区红灯进入";
+            case "WAITING_AREA_ILLEGAL_EXIT" -> "待转区非法驶离";
             case "SPEEDING" -> "超速";
             case "PARKING_VIOLATION" -> "违章停车";
             default -> "其他";

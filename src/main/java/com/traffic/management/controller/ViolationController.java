@@ -48,8 +48,10 @@ public class ViolationController {
     @GetMapping("/violations")
     public List<Map<String, Object>> getViolations(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return violationService.getViolations(page, size);
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String type) {
+        return violationService.getViolations(page, size, search, type);
     }
 
     // GET /api/violations/{id} : 查看单条违章详情
