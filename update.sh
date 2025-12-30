@@ -66,10 +66,32 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 
 echo "   ✅ BuildKit 已启用"
 
-# 6. 重新构建镜像
+# 6. 智能构建镜像
 echo ""
 echo "🔨 5. 重新构建镜像..."
-docker-compose build --no-cache
+echo ""
+
+# 构建 AI 服务（利用缓存）
+echo "   📦 构建 AI 服务 (ai-service)..."
+if docker-compose build ai-service; then
+    echo "   ✅ AI 服务构建成功"
+else
+    echo "   ❌ AI 服务构建失败"
+    exit 1
+fi
+
+echo ""
+
+# 构建 Backend 服务（利用缓存）
+echo "   📦 构建 Backend 服务 (backend)..."
+if docker-compose build backend; then
+    echo "   ✅ Backend 服务构建成功"
+else
+    echo "   ⚠️  Backend 服务构建失败，跳过（如果已有镜像会使用现有镜像）"
+fi
+
+echo ""
+echo "   💡 提示: 使用缓存加速构建，如需强制重建请运行: docker-compose build --no-cache"
 
 # 7. 启动服务
 echo ""

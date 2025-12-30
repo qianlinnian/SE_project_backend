@@ -6,19 +6,20 @@ FROM eclipse-temurin:17-jdk-alpine AS builder
 
 WORKDIR /app
 
-# 复制 Maven Wrapper 和配置文件
-COPY mvnw .
-COPY .mvn .mvn
+# 安装 Maven（如果 mvnw 不存在，使用系统 Maven）
+RUN apk add --no-cache maven
+
+# 复制 pom.xml（优先利用缓存）
 COPY pom.xml .
 
 # 下载依赖（利用 Docker 缓存层）
-RUN ./mvnw dependency:go-offline -B
+RUN mvn dependency:go-offline -B || true
 
 # 复制源代码
 COPY src ./src
 
 # 打包应用（跳过测试以加快构建速度）
-RUN ./mvnw clean package -DskipTests -B
+RUN mvn clean package -DskipTests -B
 
 # ============ 运行阶段 ============
 FROM eclipse-temurin:17-jre-alpine

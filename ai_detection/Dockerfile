@@ -22,17 +22,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgstreamer1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件（从 ai_detection 目录）
-COPY ai_detection/requirements.txt .
-
 # 配置 pip 国内镜像源（加速下载）
+# 注意：这一步要在 COPY 之前，避免因配置变化导致后续缓存失效
 RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
     pip config set install.trusted-host mirrors.aliyun.com
 
-# 安装 Python 依赖
+# 【关键优化】先只复制 requirements.txt，这样只有依赖变化时才重新安装
+COPY ai_detection/requirements.txt .
+
+# 安装 Python 依赖（这一层会被缓存，除非 requirements.txt 变化）
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制 AI 检测相关代码（只复制需要的文件）
+# 【关键优化】最后才复制代码，代码变化不会触发依赖重装
 COPY ai_detection/ .
 
 # 创建必要的目录
