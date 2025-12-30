@@ -1,11 +1,23 @@
 #!/bin/bash
 # TrafficMind 快速更新脚本
+# 用法:
+#   bash update.sh           # 正常更新（使用缓存，快速）
+#   bash update.sh --no-cache # 强制重建（不使用缓存，慢但干净）
 
 set -e  # 遇到错误立即退出
 
-echo "=========================================="
-echo "TrafficMind 快速更新"
-echo "=========================================="
+# 检查是否需要强制重建
+NO_CACHE=""
+if [[ "$1" == "--no-cache" ]]; then
+    NO_CACHE="--no-cache"
+    echo "=========================================="
+    echo "TrafficMind 完全重建模式"
+    echo "=========================================="
+else
+    echo "=========================================="
+    echo "TrafficMind 快速更新"
+    echo "=========================================="
+fi
 echo ""
 
 # 检查是否在项目目录
@@ -71,9 +83,9 @@ echo ""
 echo "🔨 5. 重新构建镜像..."
 echo ""
 
-# 构建 AI 服务（利用缓存）
+# 构建 AI 服务
 echo "   📦 构建 AI 服务 (ai-service)..."
-if docker-compose build ai-service; then
+if docker-compose build $NO_CACHE ai-service; then
     echo "   ✅ AI 服务构建成功"
 else
     echo "   ❌ AI 服务构建失败"
@@ -82,16 +94,20 @@ fi
 
 echo ""
 
-# 构建 Backend 服务（利用缓存）
+# 构建 Backend 服务
 echo "   📦 构建 Backend 服务 (backend)..."
-if docker-compose build backend; then
+if docker-compose build $NO_CACHE backend; then
     echo "   ✅ Backend 服务构建成功"
 else
     echo "   ⚠️  Backend 服务构建失败，跳过（如果已有镜像会使用现有镜像）"
 fi
 
 echo ""
-echo "   💡 提示: 使用缓存加速构建，如需强制重建请运行: docker-compose build --no-cache"
+if [[ -z "$NO_CACHE" ]]; then
+    echo "   💡 提示: 使用缓存加速构建，如遇问题请运行: bash update.sh --no-cache"
+else
+    echo "   ✅ 已完全重建所有镜像"
+fi
 
 # 7. 启动服务
 echo ""
