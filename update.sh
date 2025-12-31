@@ -153,3 +153,13 @@ echo "   查看状态: docker-compose ps"
 echo "   重启服务: docker-compose restart"
 echo "   停止服务: docker-compose down"
 echo ""
+
+
+# # 进入MySQL容器
+# docker exec -it traffic_db mysql -uroot -pTrafficMind@2024 traffic_mind
+
+# # 查询历史记录
+# SELECT id, simulation_timestamp, step, control_mode, total_queue, total_vehicles, created_at 
+# FROM traffic_flow_records 
+# ORDER BY created_at DESC 
+# LIMIT 10;

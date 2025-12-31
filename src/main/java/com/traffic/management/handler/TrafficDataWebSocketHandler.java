@@ -37,14 +37,24 @@ public class TrafficDataWebSocketHandler extends TextWebSocketHandler {
      * 广播消息给所有连接的客户端
      */
     public void broadcast(String message) {
+        log.info("🔔 准备广播交通数据，当前连接数: {}", sessions.size());
+
+        if (sessions.isEmpty()) {
+            log.warn("⚠️ 没有前端连接到WebSocket! 数据无法推送");
+            return;
+        }
+
         sessions.forEach(session -> {
             if (session.isOpen()) {
                 try {
                     session.sendMessage(new TextMessage(message));
+                    log.debug("✅ 成功发送到session: {}", session.getId());
                 } catch (IOException e) {
-                    log.error("Error sending traffic update to session {}", session.getId(), e);
+                    log.error("❌ 发送失败 session {}", session.getId(), e);
                 }
             }
         });
+
+        log.info("📡 广播完成，发送给 {} 个客户端", sessions.size());
     }
 }

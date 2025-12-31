@@ -62,7 +62,6 @@ def convert_to_serializable(obj):
 # 导入现有的检测模块
 from core.violation_detector import ViolationDetector
 from core.vehicle_tracker import VehicleTracker
-from tools.signal_adapter import SignalAdapter
 
 # ==================== 配置 ====================
 # 容器内使用服务名（backend），容器外使用服务器IP
@@ -229,12 +228,22 @@ def fetch_signal_states_from_backend():
                                 print(f"  {direction}: 直行={straight} {straight_emoji} | 左转={left} {left_emoji}")
 
                             # 推送给前端
-                            socketio.emit('traffic', {
+                            print(f"[WebSocket] 📡 准备发送LLM信号灯数据到前端...")
+
+                            data_to_send = {
                                 'signals': convert_to_serializable(current_signal_states.copy()),
                                 'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy()),
                                 'source': 'llm',
                                 'llm_phase': signal_phase
-                            })
+                            }
+
+                            socketio.emit('traffic', data_to_send)
+
+                            print(f"[WebSocket] ✅ LLM信号灯数据已发送!")
+                            print(f"[WebSocket]    - source: 'llm'")
+                            print(f"[WebSocket]    - phase: '{signal_phase}'")
+                            print(f"[WebSocket]    - signals: {data_to_send['signals']}")
+                            print(f"[WebSocket]    - leftTurnSignals: {data_to_send['leftTurnSignals']}")
 
                         return True
 

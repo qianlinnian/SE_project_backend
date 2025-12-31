@@ -49,23 +49,31 @@ public class TrafficDataService {
     @Async
     public void processIngressData(TrafficDataDTO dataDTO) {
         try {
+            log.info("📦 开始处理LLM交通数据 (timestamp: {}, step: {})",
+                     dataDTO.getTimestamp(), dataDTO.getStep());
+
             // 1. 广播到 WebSocket
             Map<String, Object> wsMessage = new HashMap<>();
             wsMessage.put("type", "traffic_update");
             wsMessage.put("data", dataDTO);
             String jsonMessage = objectMapper.writeValueAsString(wsMessage);
+            log.debug("🔊 调用WebSocket广播...");
             webSocketHandler.broadcast(jsonMessage);
 
             // 2. 更新 Redis (数据本身 + 更新时间戳)
+            log.debug("💾 保存到Redis...");
             String rawJson = objectMapper.writeValueAsString(dataDTO);
             redisTemplate.opsForValue().set(REDIS_KEY_LATEST_TRAFFIC, rawJson, REDIS_EXPIRE_HOURS, TimeUnit.HOURS);
             redisTemplate.opsForValue().set(REDIS_KEY_LAST_UPDATE_TIME, LocalDateTime.now().toString(), REDIS_EXPIRE_HOURS, TimeUnit.HOURS);
 
             // 3. 全量异步存入 MySQL
+            log.debug("🗄️ 保存到MySQL...");
             saveHistoryRecord(dataDTO);
 
+            log.info("✅ LLM数据处理完成");
+
         } catch (Exception e) {
-            log.error("Error processing traffic ingress data", e);
+            log.error("❌ 处理LLM交通数据时出错", e);
         }
     }
 

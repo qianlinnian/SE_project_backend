@@ -11,7 +11,8 @@ import java.util.List;
  */
 @Data
 @NoArgsConstructor
-public class TrafficDataDTO {
+public class TrafficDataDTO { 
+    private String type;
     private Double timestamp;
     private Integer step;
     private String roadnet;
