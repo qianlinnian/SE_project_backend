@@ -63,6 +63,8 @@ public class SecurityConfig {
                                 "/api/signals/**",
                                 // 新增：允许 LLM 推送交通数据和访问系统状态
                                 "/api/traffic/**", "/api/system/**",
+                                // WebSocket端点
+                                "/ws/**",
                                 // Spring Boot Actuator 健康检查端点
                                 "/actuator/health", "/actuator/health/**")
                         .permitAll()
