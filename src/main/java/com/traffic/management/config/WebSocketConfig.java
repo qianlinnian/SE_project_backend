@@ -9,6 +9,7 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import com.traffic.management.handler.AlertWebSocketHandler;
+import com.traffic.management.handler.TrafficDataWebSocketHandler;
 
 /**
  * WebSocket配置
@@ -20,9 +21,12 @@ import com.traffic.management.handler.AlertWebSocketHandler;
 public class WebSocketConfig implements WebSocketConfigurer, WebSocketMessageBrokerConfigurer {
 
     private final AlertWebSocketHandler alertWebSocketHandler;
+    private final TrafficDataWebSocketHandler trafficDataWebSocketHandler;
 
-    public WebSocketConfig(AlertWebSocketHandler alertWebSocketHandler) {
+    public WebSocketConfig(AlertWebSocketHandler alertWebSocketHandler,
+                          TrafficDataWebSocketHandler trafficDataWebSocketHandler) {
         this.alertWebSocketHandler = alertWebSocketHandler;
+        this.trafficDataWebSocketHandler = trafficDataWebSocketHandler;
     }
 
     // 原有的WebSocket配置（用于告警）
@@ -30,6 +34,10 @@ public class WebSocketConfig implements WebSocketConfigurer, WebSocketMessageBro
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(alertWebSocketHandler, "/ws/alerts")
                 .setAllowedOrigins("*"); // 在生产环境中应该设置具体的域名
+
+        // 注册交通数据WebSocket端点
+        registry.addHandler(trafficDataWebSocketHandler, "/ws/traffic")
+                .setAllowedOrigins("*");
     }
 
     // 新的STOMP协议配置（用于任务通知）
