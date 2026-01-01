@@ -34,13 +34,13 @@ public class ViolationReportService {
     @Autowired
     private ViolationService violationService;
 
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy年MM月dd日");
-    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy年MM月dd日 HH:mm:ss");
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    // 中文字体配置
-    private Font chineseBoldFont;
-    private Font chineseTitleFont;
-    private Font englishFont;
+    // 字体配置
+    private Font boldFont;
+    private Font titleFont;
+    private Font normalFont;
 
     public ViolationReportService() {
         initFonts();
@@ -68,9 +68,9 @@ public class ViolationReportService {
                 if (fontFile.exists()) {
                     // 使用 BaseFont 创建支持中文的字体
                     BaseFont bf = BaseFont.createFont(fontPath, BaseFont.IDENTITY_H, BaseFont.NOT_EMBEDDED);
-                    chineseBoldFont = new Font(bf, 12, Font.NORMAL);
-                    chineseTitleFont = new Font(bf, 16, Font.BOLD);
-                    englishFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
+                    boldFont = new Font(bf, 12, Font.NORMAL);
+                    titleFont = new Font(bf, 16, Font.BOLD);
+                    normalFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
                     fontLoaded = true;
                     System.out.println("PDF报告：成功加载字体: " + fontPath);
                     break;
@@ -81,11 +81,11 @@ public class ViolationReportService {
         }
 
         if (!fontLoaded) {
-            // 如果找不到中文字体，使用默认字体并标记
-            chineseBoldFont = new Font(Font.HELVETICA, 12, Font.NORMAL);
-            chineseTitleFont = new Font(Font.HELVETICA, 16, Font.BOLD);
-            englishFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
-            System.out.println("PDF报告：未找到中文字体，中文可能显示异常");
+            // 如果找不到字体，使用默认字体
+            boldFont = new Font(Font.HELVETICA, 12, Font.NORMAL);
+            titleFont = new Font(Font.HELVETICA, 16, Font.BOLD);
+            normalFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
+            System.out.println("PDF报告：使用默认字体");
         }
     }
 
@@ -181,12 +181,12 @@ public class ViolationReportService {
      */
     private void addTitle(Document document, LocalDateTime startTime, LocalDateTime endTime) throws DocumentException {
         // 主标题
-        Paragraph title = new Paragraph("TrafficMind Traffic Report", chineseTitleFont);
+        Paragraph title = new Paragraph("TrafficMind Traffic Report", titleFont);
         title.setAlignment(Element.ALIGN_CENTER);
         title.setSpacingAfter(10);
         document.add(title);
 
-        Paragraph subtitle = new Paragraph("Violation Analysis Report", englishFont);
+        Paragraph subtitle = new Paragraph("Violation Analysis Report", normalFont);
         subtitle.setAlignment(Element.ALIGN_CENTER);
         subtitle.setSpacingAfter(15);
         document.add(subtitle);
@@ -196,11 +196,11 @@ public class ViolationReportService {
         String period = startTime.toLocalDate().format(DATE_FORMATTER) + " - " +
                         endTime.toLocalDate().format(DATE_FORMATTER);
 
-        Paragraph generateInfo = new Paragraph("Generated: " + generateTime, englishFont);
+        Paragraph generateInfo = new Paragraph("Generated: " + generateTime, normalFont);
         generateInfo.setAlignment(Element.ALIGN_CENTER);
         document.add(generateInfo);
 
-        Paragraph periodInfo = new Paragraph("Period: " + period, englishFont);
+        Paragraph periodInfo = new Paragraph("Period: " + period, normalFont);
         periodInfo.setAlignment(Element.ALIGN_CENTER);
         periodInfo.setSpacingAfter(20);
         document.add(periodInfo);
@@ -251,7 +251,7 @@ public class ViolationReportService {
         List<Map<String, Object>> types = (List<Map<String, Object>>) typeData.get("data");
 
         if (types == null || types.isEmpty()) {
-            document.add(new Paragraph("  No data available", englishFont));
+            document.add(new Paragraph("  No data available", normalFont));
             return;
         }
 
@@ -294,7 +294,7 @@ public class ViolationReportService {
         List<Map<String, Object>> trend = (List<Map<String, Object>>) trendData.get("data");
 
         if (trend == null || trend.isEmpty()) {
-            document.add(new Paragraph("  No data available", englishFont));
+            document.add(new Paragraph("  No data available", normalFont));
             return;
         }
 
@@ -331,7 +331,7 @@ public class ViolationReportService {
         List<Map<String, Object>> topViolators = (List<Map<String, Object>>) topData.get("data");
 
         if (topViolators == null || topViolators.isEmpty()) {
-            document.add(new Paragraph("  No data available", englishFont));
+            document.add(new Paragraph("  No data available", normalFont));
             return;
         }
 
@@ -367,7 +367,7 @@ public class ViolationReportService {
         List<Object[]> results = violationRepository.countByIntersectionGrouped(startTime, endTime);
 
         if (results == null || results.isEmpty()) {
-            document.add(new Paragraph("  No data available", englishFont));
+            document.add(new Paragraph("  No data available", normalFont));
             return;
         }
 
@@ -397,7 +397,7 @@ public class ViolationReportService {
      * 添加章节标题
      */
     private void addSectionTitle(Document document, String title) throws DocumentException {
-        Paragraph titlePara = new Paragraph(title, chineseBoldFont);
+        Paragraph titlePara = new Paragraph(title, boldFont);
         titlePara.setSpacingBefore(15);
         titlePara.setSpacingAfter(10);
         document.add(titlePara);
@@ -407,13 +407,13 @@ public class ViolationReportService {
      * 添加概览表格行
      */
     private void addOverviewRow(PdfPTable table, String label, String value) {
-        PdfPCell labelCell = new PdfPCell(new Phrase(label, englishFont));
+        PdfPCell labelCell = new PdfPCell(new Phrase(label, normalFont));
         labelCell.setBorder(Rectangle.NO_BORDER);
         labelCell.setPadding(8);
         labelCell.setBackgroundColor(new Color(245, 245, 245));
         table.addCell(labelCell);
 
-        PdfPCell valueCell = new PdfPCell(new Phrase(value, chineseBoldFont));
+        PdfPCell valueCell = new PdfPCell(new Phrase(value, boldFont));
         valueCell.setBorder(Rectangle.NO_BORDER);
         valueCell.setPadding(8);
         table.addCell(valueCell);
@@ -423,7 +423,7 @@ public class ViolationReportService {
      * 添加表格表头
      */
     private void addTableHeader(PdfPTable table, String header) {
-        PdfPCell cell = new PdfPCell(new Phrase(header, englishFont));
+        PdfPCell cell = new PdfPCell(new Phrase(header, normalFont));
         cell.setBackgroundColor(new Color(70, 130, 180));
         cell.setPadding(6);
         cell.setHorizontalAlignment(Element.ALIGN_CENTER);
@@ -434,7 +434,7 @@ public class ViolationReportService {
      * 添加表格单元格
      */
     private void addTableCell(PdfPTable table, String text) {
-        PdfPCell cell = new PdfPCell(new Phrase(text, englishFont));
+        PdfPCell cell = new PdfPCell(new Phrase(text, normalFont));
         cell.setPadding(5);
         cell.setHorizontalAlignment(Element.ALIGN_CENTER);
         table.addCell(cell);
