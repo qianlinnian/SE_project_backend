@@ -83,6 +83,7 @@ echo ""
 echo "🔨 5. 重新构建镜像..."
 echo ""
 
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
 # 构建 AI 服务
 echo "   📦 构建 AI 服务 (ai-service)..."
 if docker-compose build $NO_CACHE ai-service; then
