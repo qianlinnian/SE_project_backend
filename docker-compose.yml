@@ -171,8 +171,11 @@ services:
       - JWT_SECRET=${JWT_SECRET:-TrafficMindSecretKeyForJWTTokenGenerationAndValidation2024_MakeItLongerThan512BitsForHS512SecurityStandard}
 
       # AI 服务配置
+      # AI_SERVICE_BASE_URL 用于图像检测服务 (Docker 内 ai-service)
       - AI_SERVICE_BASE_URL=http://ai-service:5000
       - AI_SERVICE_URL=http://ai-service:5000
+      # LLM_SERVICE_BASE_URL 用于信号控制服务 (autodl 上的 LLM)
+      - LLM_SERVICE_BASE_URL=https://u836978-a67f-943bbb9f.westc.gpuhub.com:8443
 
       # 文件存储配置
       - FILE_UPLOAD_BASE_PATH=/app/uploads

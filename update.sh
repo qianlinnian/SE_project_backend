@@ -112,7 +112,10 @@ fi
 # 7. 启动服务
 echo ""
 echo "🚀 6. 启动服务..."
-docker-compose up -d
+docker compose up -d || {
+    echo "❌ 启动服务失败，请检查日志"
+    exit 1
+}
 
 # 8. 等待服务就绪
 echo ""

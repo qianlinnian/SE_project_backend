@@ -38,10 +38,10 @@ public class SignalControlService {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Value("${ai.service.base-url:https://u836978-a67f-943bbb9f.westc.gpuhub.com:8443}")
+    @Value("${ai.llmservice.base-url:https://u836978-a67f-943bbb9f.westc.gpuhub.com:8443}")
     private String aiServerUrl;
     
-    @Value("${ai.service.control-endpoint:/api/control}")
+    @Value("${ai.llmservice.control-endpoint:/api/control}")
     private String controlEndpoint;
 
     /**
@@ -61,9 +61,6 @@ public class SignalControlService {
                 Map.of("mode", "unknown"), // 简化，实际需查询当前状态
                 Map.of("mode", mode), 
                 operatorId, "User switched control mode");
-                
-        // 4. 通过 WebSocket 广播模式变更通知 (可选，根据文档 4.1)
-        broadcastModeChange(mode);
     }
 
     /**
