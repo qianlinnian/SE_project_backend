@@ -81,12 +81,14 @@ public interface ViolationRepository extends JpaRepository<Violation, Long> {
     Long countByOccurredAtBetween(LocalDateTime startTime, LocalDateTime endTime);
 
     /**
-     * 按违规类型分组统计 (时间范围)
+     * 按违规类型分组统计 (时间范围) 
      */
     @Query("SELECT v.violationType as type, COUNT(v) as count " +
            "FROM Violation v " +
-           "WHERE v.occurredAt BETWEEN :startTime AND :endTime " +
-           "GROUP BY v.violationType")
+           "WHERE (:startTime IS NULL OR v.occurredAt >= :startTime) " +
+           "AND (:endTime IS NULL OR v.occurredAt <= :endTime) " +
+           "GROUP BY v.violationType " +
+           "ORDER BY count DESC")
     List<Object[]> countByViolationTypeGrouped(
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime);
@@ -98,7 +100,8 @@ public interface ViolationRepository extends JpaRepository<Violation, Long> {
            "COUNT(v) as count, " +
            "v.violationType as mainType " +
            "FROM Violation v " +
-           "WHERE v.occurredAt BETWEEN :startTime AND :endTime " +
+           "WHERE (:startTime IS NULL OR v.occurredAt >= :startTime) " +
+           "AND (:endTime IS NULL OR v.occurredAt <= :endTime) " +
            "GROUP BY v.plateNumber, v.violationType " +
            "ORDER BY count DESC")
     List<Object[]> findTopViolators(
@@ -112,7 +115,8 @@ public interface ViolationRepository extends JpaRepository<Violation, Long> {
     @Query("SELECT FUNCTION('DATE_FORMAT', v.occurredAt, '%Y-%m-%d %H:00:00') as timeSlot, " +
            "COUNT(v) as count " +
            "FROM Violation v " +
-           "WHERE v.occurredAt BETWEEN :startTime AND :endTime " +
+           "WHERE (:startTime IS NULL OR v.occurredAt >= :startTime) " +
+           "AND (:endTime IS NULL OR v.occurredAt <= :endTime) " +
            "GROUP BY FUNCTION('DATE_FORMAT', v.occurredAt, '%Y-%m-%d %H:00:00') " +
            "ORDER BY timeSlot")
     List<Object[]> countByHourGrouped(
@@ -125,7 +129,8 @@ public interface ViolationRepository extends JpaRepository<Violation, Long> {
     @Query("SELECT FUNCTION('DATE', v.occurredAt) as date, " +
            "COUNT(v) as count " +
            "FROM Violation v " +
-           "WHERE v.occurredAt BETWEEN :startTime AND :endTime " +
+           "WHERE (:startTime IS NULL OR v.occurredAt >= :startTime) " +
+           "AND (:endTime IS NULL OR v.occurredAt <= :endTime) " +
            "GROUP BY FUNCTION('DATE', v.occurredAt) " +
            "ORDER BY date")
     List<Object[]> countByDayGrouped(
@@ -139,7 +144,8 @@ public interface ViolationRepository extends JpaRepository<Violation, Long> {
            "FUNCTION('DAYOFWEEK', v.occurredAt) as dayOfWeek, " +
            "COUNT(v) as count " +
            "FROM Violation v " +
-           "WHERE v.occurredAt BETWEEN :startTime AND :endTime " +
+           "WHERE (:startTime IS NULL OR v.occurredAt >= :startTime) " +
+           "AND (:endTime IS NULL OR v.occurredAt <= :endTime) " +
            "GROUP BY FUNCTION('HOUR', v.occurredAt), FUNCTION('DAYOFWEEK', v.occurredAt)")
     List<Object[]> getHeatmapData(
             @Param("startTime") LocalDateTime startTime,
@@ -150,7 +156,8 @@ public interface ViolationRepository extends JpaRepository<Violation, Long> {
      */
     @Query("SELECT v.intersectionId as intersectionId, COUNT(v) as count " +
            "FROM Violation v " +
-           "WHERE v.occurredAt BETWEEN :startTime AND :endTime " +
+           "WHERE (:startTime IS NULL OR v.occurredAt >= :startTime) " +
+           "AND (:endTime IS NULL OR v.occurredAt <= :endTime) " +
            "GROUP BY v.intersectionId " +
            "ORDER BY count DESC")
     List<Object[]> countByIntersectionGrouped(

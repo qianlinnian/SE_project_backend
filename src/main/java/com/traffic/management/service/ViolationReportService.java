@@ -72,7 +72,6 @@ public class ViolationReportService {
                     titleFont = new Font(bf, 16, Font.BOLD);
                     normalFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
                     fontLoaded = true;
-                    System.out.println("PDF报告：成功加载字体: " + fontPath);
                     break;
                 }
             } catch (Exception e) {
@@ -85,7 +84,6 @@ public class ViolationReportService {
             boldFont = new Font(Font.HELVETICA, 12, Font.NORMAL);
             titleFont = new Font(Font.HELVETICA, 16, Font.BOLD);
             normalFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
-            System.out.println("PDF报告：使用默认字体");
         }
     }
 
@@ -204,11 +202,6 @@ public class ViolationReportService {
         periodInfo.setAlignment(Element.ALIGN_CENTER);
         periodInfo.setSpacingAfter(20);
         document.add(periodInfo);
-
-        // 分隔线
-        Paragraph line = new Paragraph("--------------------------------------------------------------------------");
-        line.setSpacingAfter(15);
-        document.add(line);
     }
 
     /**
@@ -246,17 +239,16 @@ public class ViolationReportService {
     private void addTypeDistributionSection(Document document, LocalDateTime startTime, LocalDateTime endTime) throws DocumentException {
         addSectionTitle(document, "2. Violation Types");
 
-        Map<String, Object> typeData = violationService.getStatisticsByType(startTime, endTime);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> types = (List<Map<String, Object>>) typeData.get("data");
+        // 直接从 repository 查询，支持可选日期
+        List<Object[]> results = violationRepository.countByViolationTypeGrouped(startTime, endTime);
 
-        if (types == null || types.isEmpty()) {
-            document.add(new Paragraph("  No data available", normalFont));
+        if (results.isEmpty()) {
+            document.add(new Paragraph("  No violation data available", normalFont));
             return;
         }
 
-        // 计算总数用于百分比
-        long total = types.stream().mapToLong(t -> ((Number) t.get("count")).longValue()).sum();
+        // 计算总数
+        long total = results.stream().mapToLong(row -> ((Number) row[1]).longValue()).sum();
 
         // 创建表格
         PdfPTable table = new PdfPTable(3);
@@ -269,9 +261,10 @@ public class ViolationReportService {
         addTableHeader(table, "Percent");
 
         // 数据行
-        for (Map<String, Object> item : types) {
-            String typeName = (String) item.get("typeName");
-            long count = ((Number) item.get("count")).longValue();
+        for (Object[] row : results) {
+            String type = row[0].toString();
+            String typeName = getViolationTypeName(type);
+            long count = ((Number) row[1]).longValue();
             double percentage = total > 0 ? (count * 100.0 / total) : 0;
 
             addTableCell(table, typeName);
@@ -281,6 +274,20 @@ public class ViolationReportService {
 
         document.add(table);
         document.add(new Paragraph(" "));
+    }
+
+    /**
+     * 获取违规类型的英文名称
+     */
+    private String getViolationTypeName(String type) {
+        if (type == null) return "Unknown";
+        return switch (type) {
+            case "RED_LIGHT" -> "Red Light";
+            case "WRONG_WAY" -> "Wrong Way";
+            case "CROSS_SOLID_LINE" -> "Cross Solid Line";
+            case "ILLEGAL_TURN" -> "Illegal Turn";
+            default -> type;
+        };
     }
 
     /**
