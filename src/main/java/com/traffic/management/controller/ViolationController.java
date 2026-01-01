@@ -3,8 +3,12 @@ package com.traffic.management.controller;
 import com.traffic.management.handler.AlertWebSocketHandler;
 import com.traffic.management.service.ViolationService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
@@ -24,7 +28,7 @@ public class ViolationController {
         var savedViolation = violationService.reportViolation(violation);
 
         // 发送实时警报
-        String violationType = violation.containsKey("type") ? violation.get("type").toString() : 
+        String violationType = violation.containsKey("type") ? violation.get("type").toString() :
                               (violation.containsKey("violationType") ? violation.get("violationType").toString() : "UNKNOWN");
         String intersectionId = violation.containsKey("intersectionId") ? violation.get("intersectionId").toString() : "UNKNOWN";
         String alertMessage = "New violation detected: " + violationType +
@@ -79,5 +83,44 @@ public class ViolationController {
     @GetMapping("/violations/count")
     public Map<String, Object> getViolationCount() {
         return Map.of("count", violationService.getViolationCount());
+    }
+
+    // ========== 统计分析 API ==========
+
+    /**
+     * 按违规类型统计
+     * GET /api/violations/statistics/by-type
+     */
+    @GetMapping("/violations/statistics/by-type")
+    public Map<String, Object> getStatisticsByType(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime startTime = getStartDateTime(startDate);
+        LocalDateTime endTime = getEndDateTime(endDate);
+
+        return violationService.getStatisticsByType(startTime, endTime);
+    }
+
+    // ========== 辅助方法 ==========
+
+    /**
+     * 获取开始时间（默认30天前）
+     */
+    private LocalDateTime getStartDateTime(LocalDate startDate) {
+        if (startDate == null) {
+            return LocalDateTime.now().minusDays(30).with(LocalTime.MIN);
+        }
+        return startDate.atStartOfDay();
+    }
+
+    /**
+     * 获取结束时间（默认今天）
+     */
+    private LocalDateTime getEndDateTime(LocalDate endDate) {
+        if (endDate == null) {
+            return LocalDateTime.now().with(LocalTime.MAX);
+        }
+        return endDate.atTime(LocalTime.MAX);
     }
 }
