@@ -601,7 +601,12 @@ class ViolationDetector:
         dy = end_point[1] - start_point[1]
         
         # 判断是南北向还是东西向（基于移动的主方向）
-        is_ns_direction = abs(dy) > abs(dx)  # True: 南北向, False: 东西向
+        if self.is_rotated_view:
+            # rois2.json: 东西向为竖直，南北向为水平
+            is_ns_direction = abs(dx) > abs(dy)  # True: 南北向(水平移动dx大), False: 东西向(竖直移动dy大)
+        else:
+            # rois.json: 南北向为竖直，东西向为水平
+            is_ns_direction = abs(dy) > abs(dx)  # True: 南北向(竖直移动dy大), False: 东西向(水平移动dx大)
         
         # 根据主方向，只检查对应的方向车道
         if is_ns_direction:

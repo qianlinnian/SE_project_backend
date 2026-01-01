@@ -172,6 +172,7 @@ python scripts/test_image.py --folder violations_images --export output/violatio
 python scripts/main_pipeline_manual.py --video data/test_video.mp4 --output result.mp4 --rois ./data/rois.json
 
 python scripts/main_pipeline_manual.py --video data/car_2_cross_wrong_n.mp4 --output result.mp4 --rois ./data/rois.json
+python scripts/main_pipeline_manual.py --video data/car_1_wrong.mp4 --output result.mp4 --rois ./data/rois2.json
 
 ```
 
