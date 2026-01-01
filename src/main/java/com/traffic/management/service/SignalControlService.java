@@ -90,19 +90,23 @@ public class SignalControlService {
      */
     private void sendToLLM(Map<String, Object> payload) throws Exception {
         String url = aiServerUrl + controlEndpoint;
+        log.info("🔄 准备发送LLM控制命令 - URL: {}, Payload: {}", url, payload);
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        
+
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
-        
+
         try {
             // RestTemplate 已配置超时，这里直接调用
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
+                log.error("❌ LLM返回非200状态码: {}", response.getStatusCode());
                 throw new RuntimeException("LLM Server returned " + response.getStatusCode());
             }
+            log.info("✅ LLM控制命令发送成功 - 响应: {}", response.getBody());
         } catch (Exception e) {
-            log.error("Failed to send command to LLM: {}", e.getMessage());
+            log.error("❌ 发送LLM控制命令失败 - URL: {}, 错误: {}", url, e.getMessage(), e);
             throw new RuntimeException("Failed to communicate with LLM Server: " + e.getMessage());
         }
     }
