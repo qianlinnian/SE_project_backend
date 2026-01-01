@@ -13,7 +13,7 @@ if _AI_DETECTION_DIR not in sys.path:
     sys.path.insert(0, _AI_DETECTION_DIR)
 
 from datetime import datetime
-from backend_api_client import BackendAPIClient
+from api.backend_api_client import BackendAPIClient
 
 
 def print_section(title):

@@ -102,7 +102,7 @@ class ViolationDetector:
 
         if enable_api:
             try:
-                from backend_api_client import BackendAPIClient
+                from api.backend_api_client import BackendAPIClient
                 self.api_client = BackendAPIClient(
                     username=backend_username,
                     password=backend_password
@@ -206,11 +206,21 @@ class ViolationDetector:
             violation_record: 本地违规记录字典
         """
         try:
-            # 获取截图路径
-            screenshot_path = violation_record.get('screenshot', '')
+            # 检查API客户端是否可用
+            if not self.api_client:
+                print(f"[API] ⚠️ API客户端未初始化，无法上报违规")
+                return
 
-            # 上传图片（当前返回本地路径）
-            image_url = self.api_client.upload_image(screenshot_path) if screenshot_path else 'file:///no_image.jpg'
+            # 获取截图路径并转换为字符串
+            screenshot_path = violation_record.get('screenshot', '')
+            if screenshot_path:
+                screenshot_path = str(screenshot_path)  # 确保是字符串类型
+
+            # 上传图片到后端（成功返回公网URL，失败返回本地路径）
+            if screenshot_path:
+                image_url = self.api_client.upload_image(screenshot_path)
+            else:
+                image_url = 'file:///no_image.jpg'
 
             # 转换时间戳
             timestamp_str = violation_record.get('timestamp', datetime.now().isoformat())
@@ -220,7 +230,7 @@ class ViolationDetector:
 
             # 生成临时车牌号（基于 track_id）
             track_id = violation_record.get('track_id', 0)
-            plate_number = f"未识别_{track_id}"
+            plate_number = f"un_{track_id}"
 
             # 准备 API 数据
             api_data = {
@@ -239,12 +249,14 @@ class ViolationDetector:
 
             if violation_id:
                 violation_record['backend_id'] = violation_id
-                print(f"[API] ✅ 上报成功! 后端ID: {violation_id}")
+                print(f"[API] ✅ 上报成功! 后端ID: {violation_id}, 图片: {image_url}")
             else:
                 print(f"[API] ❌ 上报失败")
 
         except Exception as e:
             print(f"[API] ⚠️  上报异常: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
 
     def update_signal_state(self, direction: str, state: str, force_print=False):
         """

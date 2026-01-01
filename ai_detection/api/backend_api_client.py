@@ -113,6 +113,23 @@ class BackendAPIClient:
                     return violation_id
                 else:
                     print(f"[API] ❌ 上报失败: {result.get('message')}")
+            elif response.status_code == 401:
+                # Token过期，重新登录并重试
+                print(f"[API]  Token过期，重新登录...")
+                self._login()
+                if self.jwt_token:
+                    try:
+                        # 重试上报
+                        retry_response = self.session.post(url, json=violation_data, timeout=3)
+                        if retry_response.status_code == 200:
+                            result = retry_response.json()
+                            if 'id' in result:
+                                violation_id = result.get('id')
+                                print(f"[API] ✅ 上报成功(重试)! 后端ID: {violation_id}")
+                                return violation_id
+                    except Exception as retry_error:
+                        print(f"[API]  重试上报失败: {retry_error}")
+                print(f"[API]  重新登录后上报仍然失败")
             else:
                 print(f"[API] ❌ HTTP {response.status_code}: {response.text}")
 
@@ -256,6 +273,28 @@ class BackendAPIClient:
                     return image_url
                 else:
                     print(f"[API]  图片上传失败: {result.get('message')}")
+            elif response.status_code == 401:
+                # Token过期，尝试重新登录并重试
+                print(f"[API]  Token过期，重新登录...")
+                self._login()
+                if self.jwt_token:
+                    try:
+                        # 重试上传
+                        with open(image_path, 'rb') as f:
+                            files = {'file': (os.path.basename(image_path), f, 'image/jpeg')}
+                            data = {'type': 'violation'}
+                            headers = {'Authorization': f'Bearer {self.jwt_token}'}
+                            retry_response = requests.post(url, files=files, data=data, headers=headers, timeout=5)
+
+                            if retry_response.status_code == 200:
+                                result = retry_response.json()
+                                if result.get('success'):
+                                    image_url = result.get('url')
+                                    print(f"[API]  图片上传成功(重试): {image_url}")
+                                    return image_url
+                    except Exception as retry_error:
+                        print(f"[API]  重试上传失败: {retry_error}")
+                print(f"[API]  重新登录后上传仍然失败")
             else:
                 print(f"[API]  图片上传失败 HTTP {response.status_code}")
                 try:

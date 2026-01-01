@@ -78,46 +78,10 @@ END$$
 DELIMITER ;
 
 -- ============================================================
--- 触发器3: 创建交警账号时自动记录审计日志
--- 说明: 管理员创建交警账号时自动记录
+-- 触发器3和4已移除
+-- 说明: 用户创建和删除操作的日志记录改为由应用层控制
+--       这样可以正确记录操作人信息(operator_id)
 -- ============================================================
-DELIMITER $$
-
-CREATE TRIGGER trg_user_insert
-AFTER INSERT ON users
-FOR EACH ROW
-BEGIN
-    -- 只记录交警账号（POLICE）的创建，管理员（ADMIN）不记录
-    IF NEW.role = 'POLICE' THEN
-        INSERT INTO audit_logs (operator_id, operation_type, target_type, target_id, operation_details, created_at)
-        VALUES (NULL, 'CREATE_USER', 'USER', NEW.id,
-                JSON_OBJECT('username', NEW.username, 'full_name', NEW.full_name, 'police_number', IFNULL(NEW.police_number, '')),
-                NOW());
-    END IF;
-END$$
-
-DELIMITER ;
-
--- ============================================================
--- 触发器4: 删除交警账号时自动记录审计日志
--- 说明: 管理员删除交警账号时自动记录
--- ============================================================
-DELIMITER $$
-
-CREATE TRIGGER trg_user_delete
-AFTER DELETE ON users
-FOR EACH ROW
-BEGIN
-    -- 只记录交警账号（POLICE）的删除
-    IF OLD.role = 'POLICE' THEN
-        INSERT INTO audit_logs (operator_id, operation_type, target_type, target_id, operation_details, created_at)
-        VALUES (NULL, 'DELETE_USER', 'USER', OLD.id,
-                JSON_OBJECT('username', OLD.username, 'full_name', OLD.full_name, 'police_number', IFNULL(OLD.police_number, '')),
-                NOW());
-    END IF;
-END$$
-
-DELIMITER ;
 
 -- ============================================================
 -- 存储过程1: 批量生成日报数据
