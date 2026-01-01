@@ -154,30 +154,17 @@ public class ViolationService {
             return getViolationsWithFilter(page, size, search, type);
         }
 
-        // 无筛选条件时，使用原有的Redis缓存逻辑
-        // 1. 尝试从 Redis 获取（最近的数据可能还在缓存中）
-        List<Object> cachedViolations = redisTemplate.opsForList().range(VIOLATIONS_LIST_KEY, 0, size - 1);
-        if (cachedViolations != null && !cachedViolations.isEmpty()) {
-            List<Map<String, Object>> result = new ArrayList<>();
-            for (Object v : cachedViolations) {
-                if (v instanceof Map) {
-                    result.add((Map<String, Object>) v);
-                }
-            }
-            return result;
-        }
-
-        // 2. Redis 中没有，从 MySQL 查询（分页）
+        // 无筛选条件时，直接从数据库查询（Redis List缓存不支持分页，已移除）
         // 注意:前端已经将page转换为0-based(page-1),所以这里直接使用page
         Pageable pageable = PageRequest.of(page, size);
         Page<Violation> violationPage = violationRepository.findAll(pageable);
 
-        // 3. 将查询结果写回 Redis 缓存
+        // 转换为Map并缓存单条记录
         List<Map<String, Object>> result = new ArrayList<>();
         for (Violation v : violationPage.getContent()) {
             Map<String, Object> map = convertToMap(v);
             result.add(map);
-            // 缓存单条记录
+            // 缓存单条记录（用于详情查询加速）
             String cacheKey = VIOLATION_CACHE_PREFIX + v.getId();
             redisTemplate.opsForHash().putAll(cacheKey, map);
             redisTemplate.expire(cacheKey, Duration.ofMinutes(CACHE_DURATION_MINUTES));
