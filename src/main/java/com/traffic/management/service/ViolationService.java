@@ -353,7 +353,10 @@ public class ViolationService {
         Map<String, Object> map = new HashMap<>();
         map.put("id", violation.getId());
         map.put("intersectionId", violation.getIntersectionId());
+        map.put("direction", violation.getDirection() != null ? violation.getDirection().toString() : null);
+        map.put("turnType", violation.getTurnType() != null ? violation.getTurnType().toString() : null);
         map.put("plateNumber", violation.getPlateNumber());
+        map.put("vehicleType", violation.getVehicleType());
         map.put("violationType", violation.getViolationType() != null ? violation.getViolationType().toString() : null);
         map.put("imageUrl", violation.getImageUrl());
         map.put("aiConfidence", violation.getAiConfidence());
