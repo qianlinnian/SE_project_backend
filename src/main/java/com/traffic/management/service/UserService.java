@@ -17,9 +17,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 /**
  * 用户服务
  */
@@ -104,5 +101,22 @@ public class UserService {
     public User getUserById(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    /**
+     * 删除用户
+     */
+    @Transactional
+    public void deleteUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        // 防止删除管理员账号
+        if (user.getRole() == User.UserRole.ADMIN) {
+            throw new BusinessException(ErrorCode.CANNOT_DELETE_ADMIN);
+        }
+
+        userRepository.delete(user);
+        log.info("删除用户成功: {} (ID: {})", user.getUsername(), userId);
     }
 }

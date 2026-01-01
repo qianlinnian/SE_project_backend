@@ -27,6 +27,7 @@ public enum ErrorCode {
     USERNAME_EXISTS(41002, "用户名已存在"),
     POLICE_NUMBER_EXISTS(41003, "警号已存在"),
     INVALID_USER_STATUS(41004, "无效的用户状态"),
+    CANNOT_DELETE_ADMIN(41005, "不能删除管理员账号"),
     
     // 路口相关错误 (42xxx)
     INTERSECTION_NOT_FOUND(42001, "路口不存在"),

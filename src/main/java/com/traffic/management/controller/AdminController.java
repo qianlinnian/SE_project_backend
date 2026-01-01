@@ -54,4 +54,26 @@ public class AdminController {
         User user = userService.updateUserStatus(id, request);
         return ApiResponse.success("更新成功", user);
     }
+
+    /**
+     * 获取用户列表（分页）- 返回交警列表
+     */
+    @GetMapping("/users")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<PageResponse<User>> getAllUsers(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer pageSize) {
+        PageResponse<User> response = userService.listPolice(page, pageSize);
+        return ApiResponse.success(response);
+    }
+
+    /**
+     * 删除用户账号
+     */
+    @DeleteMapping("/users/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<Void> deleteUser(@PathVariable Long id) {
+        userService.deleteUser(id);
+        return ApiResponse.success("删除成功", null);
+    }
 }

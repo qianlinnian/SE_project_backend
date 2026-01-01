@@ -1351,16 +1351,20 @@ def process_video_realtime(task_id: str, video_url: str, video_path: str,
                 encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY]
                 _, buffer = cv2.imencode('.jpg', annotated_frame, encode_param)
                 frame_base64 = base64.b64encode(buffer).decode('utf-8')
-                
+
+                # 获取车辆到车道的映射
+                lane_mapping = detector.get_vehicle_lane_mapping(tracks)
+
                 # 推送帧到所有连接的客户端
                 socketio.emit('frame', convert_to_serializable({
                     'taskId': task_id,
                     'frameNumber': frame_count,
                     'progress': progress,
                     'image': frame_base64,
-                    'violations': len(violations_detected)
+                    'violations': len(violations_detected),
+                    'laneMapping': lane_mapping  # 车辆到车道映射
                 }))
-                
+
                 processed_count += 1
             
             # 控制处理速度（模拟实时）

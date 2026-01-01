@@ -12,7 +12,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -35,6 +37,7 @@ public class AuthService {
     /**
      * 用户登录
      */
+    @Transactional
     public LoginResponse login(LoginRequest request) {
         // 查询用户
         User user = userRepository.findByUsername(request.getUsername())
@@ -42,13 +45,13 @@ public class AuthService {
                     log.error("用户不存在: {}", request.getUsername());
                     return new BusinessException(ErrorCode.LOGIN_FAILED);
                 });
-        
+
         log.debug("找到用户: {}, 密码哈希: {}", user.getUsername(), user.getPasswordHash());
 
         // 验证密码
         boolean passwordMatch = passwordEncoder.matches(request.getPassword(), user.getPasswordHash());
         log.debug("密码验证结果: {}", passwordMatch);
-        
+
         if (!passwordMatch) {
             log.error("密码验证失败，用户: {}, 输入密码: {}", user.getUsername(), request.getPassword());
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
@@ -58,6 +61,10 @@ public class AuthService {
         if (user.getStatus() == User.UserStatus.SUSPENDED) {
             throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
         }
+
+        // 更新最后登录时间
+        user.setLastLoginTime(LocalDateTime.now());
+        userRepository.save(user);
 
         // 生成Token
         String token = jwtTokenProvider.generateToken(user);

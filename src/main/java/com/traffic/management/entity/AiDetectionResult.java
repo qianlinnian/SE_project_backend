@@ -36,6 +36,12 @@ public class AiDetectionResult {
     @Column(name = "plate_number", nullable = false, length = 20)
     private String plateNumber;
 
+    /**
+     * 车辆类型 (car, bus, truck, bicycle, motorcycle, train)
+     */
+    @Column(name = "vehicle_type", length = 50)
+    private String vehicleType;
+
     @Column(name = "violation_type", nullable = false, length = 50)
     private String violationType;
 

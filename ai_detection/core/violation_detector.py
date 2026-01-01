@@ -369,6 +369,89 @@ class ViolationDetector:
         # 距离在减小 = 靠近中心 = 进入路口
         return curr_dist < prev_dist
 
+    def get_vehicle_lane_mapping(self, tracks):
+        """
+        获取车辆到车道的映射关系
+
+        根据车辆底部中心点的位置，判断每辆车属于哪个方向、哪条车道（in/out、第几条）
+
+        Args:
+            tracks: 追踪结果列表 [(track_id, (x1, y1, x2, y2)), ...]
+
+        Returns:
+            dict: 车道映射信息
+            {
+                "isRotatedView": True/False,  # 是否为旋转视角（rois2.json）
+                "vehicles": [
+                    {
+                        "trackId": 1,
+                        "direction": "north_bound",  # 方向
+                        "laneType": "in",  # in(驶入) 或 out(驶出)
+                        "laneIndex": 0,  # 车道索引（从0开始）
+                        "position": [x, y],  # 底部中心点位置
+                        "bbox": [x1, y1, x2, y2]  # 边界框
+                    },
+                    ...
+                ],
+                "laneCounts": {
+                    "north_bound": {"in": 2, "out": 1},
+                    ...
+                }
+            }
+        """
+        lane_mapping = {
+            "isRotatedView": self.is_rotated_view,
+            "vehicles": [],
+            "laneCounts": {
+                "north_bound": {"in": 0, "out": 0},
+                "south_bound": {"in": 0, "out": 0},
+                "east_bound": {"in": 0, "out": 0},
+                "west_bound": {"in": 0, "out": 0}
+            }
+        }
+
+        for track_id, bbox in tracks:
+            x1, y1, x2, y2 = bbox
+            # 使用底部中心点（车轮位置）
+            vehicle_center = (int((x1 + x2) / 2), int(y2))
+
+            # 遍历所有方向，检查车辆在哪条车道中
+            for direction, data in self.rois.items():
+                if direction == 'solid_lines':
+                    continue
+
+                # 检查 in 车道
+                for lane_idx, lane_poly in enumerate(data.get('lanes', {}).get('in', [])):
+                    if self.is_point_in_polygon(vehicle_center, lane_poly):
+                        vehicle_info = {
+                            "trackId": int(track_id),
+                            "direction": direction,
+                            "laneType": "in",
+                            "laneIndex": lane_idx,
+                            "position": [int(vehicle_center[0]), int(vehicle_center[1])],
+                            "bbox": [float(x1), float(y1), float(x2), float(y2)]
+                        }
+                        lane_mapping["vehicles"].append(vehicle_info)
+                        lane_mapping["laneCounts"][direction]["in"] += 1
+                        break
+                else:
+                    # 检查 out 车道
+                    for lane_idx, lane_poly in enumerate(data.get('lanes', {}).get('out', [])):
+                        if self.is_point_in_polygon(vehicle_center, lane_poly):
+                            vehicle_info = {
+                                "trackId": int(track_id),
+                                "direction": direction,
+                                "laneType": "out",
+                                "laneIndex": lane_idx,
+                                "position": [int(vehicle_center[0]), int(vehicle_center[1])],
+                                "bbox": [float(x1), float(y1), float(x2), float(y2)]
+                            }
+                            lane_mapping["vehicles"].append(vehicle_info)
+                            lane_mapping["laneCounts"][direction]["out"] += 1
+                            break
+
+        return lane_mapping
+
     def detect_red_light_violation(self, track_id: int, bbox, frame, timestamp):
         """
         检测闯红灯违规
@@ -619,12 +702,20 @@ class ViolationDetector:
     def _is_moving_wrong_direction_in(self, direction: str, start_pos, end_pos):
         """
         判断车辆在in车道中的移动方向是否正确
-        
+
         in车道：车辆应该驶向路口中心
+
+        如果是 rois.json 配置（传统视角）：
         - north_bound in: 从上往下 (y增大) - 正确
-        - south_bound in: 从下往上 (y减小) - 正确  
+        - south_bound in: 从下往上 (y减小) - 正确
         - west_bound in: 从左往右 (x增大) - 正确
         - east_bound in: 从右往左 (x减小) - 正确
+
+        如果是 rois2.json 配置（旋转视角）：
+        - west_bound in: 从上往下 (y增大) - 正确
+        - east_bound in: 从下往上 (y减小) - 正确
+        - south_bound in: 从左往右 (x增大) - 正确
+        - north_bound in: 从右往左 (x减小) - 正确
 
         Args:
             direction: 方向
@@ -633,35 +724,60 @@ class ViolationDetector:
 
         Returns:
             bool: True表示逆行
+
         """
         dx = end_pos[0] - start_pos[0]
         dy = end_pos[1] - start_pos[1]
         threshold = 10
 
-        if direction == 'north_bound':
-            # 正确：从上往下 (y增大)，逆行：从下往上 (y减小)
-            return dy < -threshold
-        elif direction == 'south_bound':
-            # 正确：从下往上 (y减小)，逆行：从上往下 (y增大)
-            return dy > threshold
-        elif direction == 'west_bound':
-            # 正确：从左往右 (x增大)，逆行：从右往左 (x减小)
-            return dx < -threshold
-        elif direction == 'east_bound':
-            # 正确：从右往左 (x减小)，逆行：从左往右 (x增大)
-            return dx > threshold
+        if self.is_rotated_view:
+            # rois2.json: 东西向为竖直，南北向为水平
+            if direction == 'west_bound':
+                # 正确：从上往下 (y增大)，逆行：从下往上 (y减小)
+                return dy < -threshold
+            elif direction == 'east_bound':
+                # 正确：从下往上 (y减小)，逆行：从上往下 (y增大)
+                return dy > threshold
+            elif direction == 'south_bound':
+                # 正确：从左往右 (x增大)，逆行：从右往左 (x减小)
+                return dx < -threshold
+            elif direction == 'north_bound':
+                # 正确：从右往左 (x减小)，逆行：从左往右 (x增大)
+                return dx > threshold
+        else:
+            # rois.json: 南北向为竖直，东西向为水平（传统）
+            if direction == 'north_bound':
+                # 正确：从上往下 (y增大)，逆行：从下往上 (y减小)
+                return dy < -threshold
+            elif direction == 'south_bound':
+                # 正确：从下往上 (y减小)，逆行：从上往下 (y增大)
+                return dy > threshold
+            elif direction == 'west_bound':
+                # 正确：从左往右 (x增大)，逆行：从右往左 (x减小)
+                return dx < -threshold
+            elif direction == 'east_bound':
+                # 正确：从右往左 (x减小)，逆行：从左往右 (x增大)
+                return dx > threshold
 
         return False
 
     def _is_moving_wrong_direction_out(self, direction: str, start_pos, end_pos):
         """
         判断车辆在out车道中的移动方向是否正确
-        
+
         out车道：车辆应该背离路口中心
+
+        如果是 rois.json 配置（传统视角）：
         - north_bound out: 从下往上 (y减小) - 正确
         - south_bound out: 从上往下 (y增大) - 正确
         - west_bound out: 从右往左 (x减小) - 正确
         - east_bound out: 从左往右 (x增大) - 正确
+
+        如果是 rois2.json 配置（旋转视角）：
+        - west_bound out: 从下往上 (y减小) - 正确
+        - east_bound out: 从上往下 (y增大) - 正确
+        - south_bound out: 从右往左 (x减小) - 正确
+        - north_bound out: 从左往右 (x增大) - 正确
 
         Args:
             direction: 方向
@@ -675,18 +791,34 @@ class ViolationDetector:
         dy = end_pos[1] - start_pos[1]
         threshold = 10
 
-        if direction == 'north_bound':
-            # 正确：从下往上 (y减小)，逆行：从上往下 (y增大)
-            return dy > threshold
-        elif direction == 'south_bound':
-            # 正确：从上往下 (y增大)，逆行：从下往上 (y减小)
-            return dy < -threshold
-        elif direction == 'west_bound':
-            # 正确：从右往左 (x减小)，逆行：从左往右 (x增大)
-            return dx > threshold
-        elif direction == 'east_bound':
-            # 正确：从左往右 (x增大)，逆行：从右往左 (x减小)
-            return dx < -threshold
+        if self.is_rotated_view:
+            # rois2.json: 东西向为竖直，南北向为水平
+            if direction == 'west_bound':
+                # 正确：从下往上 (y减小)，逆行：从上往下 (y增大)
+                return dy > threshold
+            elif direction == 'east_bound':
+                # 正确：从上往下 (y增大)，逆行：从下往上 (y减小)
+                return dy < -threshold
+            elif direction == 'south_bound':
+                # 正确：从右往左 (x减小)，逆行：从左往右 (x增大)
+                return dx > threshold
+            elif direction == 'north_bound':
+                # 正确：从左往右 (x增大)，逆行：从右往左 (x减小)
+                return dx < -threshold
+        else:
+            # rois.json: 南北向为竖直，东西向为水平（传统）
+            if direction == 'north_bound':
+                # 正确：从下往上 (y减小)，逆行：从上往下 (y增大)
+                return dy > threshold
+            elif direction == 'south_bound':
+                # 正确：从上往下 (y增大)，逆行：从下往上 (y减小)
+                return dy < -threshold
+            elif direction == 'west_bound':
+                # 正确：从右往左 (x减小)，逆行：从左往右 (x增大)
+                return dx > threshold
+            elif direction == 'east_bound':
+                # 正确：从左往右 (x增大)，逆行：从右往左 (x减小)
+                return dx < -threshold
 
         return False
 
