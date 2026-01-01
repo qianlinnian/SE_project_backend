@@ -126,6 +126,13 @@
             <version>0.7.0</version>
         </dependency>
 
+        <!-- Apache HttpClient 5 - 支持HTTPS和SSL -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <version>5.2.1</version>
+        </dependency>
+
         <!-- 异步处理支持 - 使用内置的异步功能 -->
         <dependency>
             <groupId>org.springframework</groupId>
