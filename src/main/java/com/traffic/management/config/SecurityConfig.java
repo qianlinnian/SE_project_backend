@@ -61,6 +61,8 @@ public class SecurityConfig {
                                 "/api/ai-integration/**", "/api/violation-detection/**",
                                 "/api/multi-direction-traffic/**", "/api/test/**",
                                 "/api/signals/**",
+                                // 信号控制接口
+                                "/api/control/**",
                                 // 新增：允许 LLM 推送交通数据和访问系统状态
                                 "/api/traffic/**", "/api/system/**",
                                 // 文件下载接口
