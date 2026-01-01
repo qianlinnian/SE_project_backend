@@ -88,6 +88,21 @@ public class ViolationController {
     // ========== 统计分析 API ==========
 
     /**
+     * 获取统计总览
+     * GET /api/violations/statistics/overview
+     */
+    @GetMapping("/violations/statistics/overview")
+    public Map<String, Object> getStatisticsOverview(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime startTime = getStartDateTime(startDate);
+        LocalDateTime endTime = getEndDateTime(endDate);
+
+        return violationService.getStatisticsOverview(startTime, endTime);
+    }
+
+    /**
      * 按违规类型统计
      * GET /api/violations/statistics/by-type
      */
@@ -100,6 +115,37 @@ public class ViolationController {
         LocalDateTime endTime = getEndDateTime(endDate);
 
         return violationService.getStatisticsByType(startTime, endTime);
+    }
+
+    /**
+     * 获取违规趋势数据
+     * GET /api/violations/statistics/trend
+     */
+    @GetMapping("/violations/statistics/trend")
+    public Map<String, Object> getStatisticsTrend(
+            @RequestParam(defaultValue = "day") String granularity,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime startTime = getStartDateTime(startDate);
+        LocalDateTime endTime = getEndDateTime(endDate);
+
+        return violationService.getStatisticsTrend(granularity, startTime, endTime);
+    }
+
+    /**
+     * 获取违规热力图数据
+     * GET /api/violations/statistics/heatmap
+     */
+    @GetMapping("/violations/statistics/heatmap")
+    public Map<String, Object> getStatisticsHeatmap(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime startTime = getStartDateTime(startDate);
+        LocalDateTime endTime = getEndDateTime(endDate);
+
+        return violationService.getStatisticsHeatmap(startTime, endTime);
     }
 
     // ========== 辅助方法 ==========
