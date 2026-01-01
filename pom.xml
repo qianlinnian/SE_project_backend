@@ -139,6 +139,12 @@
             <artifactId>spring-context</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <version>4.5.14</version>
+        </dependency>
+
         <!-- Lombok - 添加版本号确保兼容 Java 17 -->
         <dependency>
             <groupId>org.projectlombok</groupId>
