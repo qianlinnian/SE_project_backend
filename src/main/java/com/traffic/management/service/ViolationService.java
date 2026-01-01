@@ -282,10 +282,18 @@ public class ViolationService {
                 // 2. 写入 MySQL（更新持久化数据）
                 Violation updated = violationRepository.save(violation);
 
-                // 3. 更新 Redis 缓存
+                // 3. 改进的缓存更新策略：先删除旧缓存，再写入新数据（保证一致性）
                 String cacheKey = VIOLATION_CACHE_PREFIX + id;
+
+                // 先删除旧缓存（避免脏数据）
+                redisTemplate.delete(cacheKey);
+
+                // 写入最新数据到缓存
                 redisTemplate.opsForHash().putAll(cacheKey, convertToMap(updated));
                 redisTemplate.expire(cacheKey, Duration.ofMinutes(CACHE_DURATION_MINUTES));
+
+                // 4. 清除列表缓存（因为列表中的数据状态已改变）
+                redisTemplate.delete(VIOLATIONS_LIST_KEY);
             }
         } catch (NumberFormatException e) {
             // ID 格式不对，忽略
@@ -298,6 +306,41 @@ public class ViolationService {
     public Long getViolationCount() {
         Object value = redisTemplate.opsForValue().get(VIOLATION_COUNT_KEY);
         return value != null ? Long.parseLong(value.toString()) : 0L;
+    }
+
+    /**
+     * 获取带筛选条件的违章总数：直接查询数据库
+     */
+    public Long getViolationCountWithFilter(String search, String type) {
+        // 如果没有筛选条件，直接查询所有记录数
+        if ((search == null || search.isEmpty()) && (type == null || type.isEmpty())) {
+            return violationRepository.count();
+        }
+
+        // 如果有筛选条件，需要根据条件统计
+        try {
+            if (search != null && !search.isEmpty() && type != null && !type.isEmpty()) {
+                // 同时有车牌和类型筛选
+                Violation.ViolationType violationType = Violation.ViolationType.valueOf(type);
+                return (long) violationRepository.findByViolationTypeAndPlateNumberContaining(
+                        violationType, search, org.springframework.data.domain.Pageable.unpaged()
+                ).getTotalElements();
+            } else if (search != null && !search.isEmpty()) {
+                // 仅车牌筛选
+                return (long) violationRepository.findByPlateNumberContaining(
+                        search, org.springframework.data.domain.Pageable.unpaged()
+                ).getTotalElements();
+            } else {
+                // 仅类型筛选
+                Violation.ViolationType violationType = Violation.ViolationType.valueOf(type);
+                return (long) violationRepository.findByViolationType(
+                        violationType, org.springframework.data.domain.Pageable.unpaged()
+                ).getTotalElements();
+            }
+        } catch (IllegalArgumentException e) {
+            // 如果类型无效，返回所有记录数
+            return violationRepository.count();
+        }
     }
 
     /**

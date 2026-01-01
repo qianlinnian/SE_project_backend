@@ -30,8 +30,9 @@ public class FileController {
     @Value("${file.upload.base-path:d:/traffic_uploads}")
     private String uploadBasePath;
 
-    @Value("${server.callback.base-url:http://localhost:8081}")
-    private String serverBaseUrl;
+    // 前端浏览器访问文件的URL（必须是外网地址，供浏览器访问）
+    @Value("${file.url.base-url:http://localhost:8081}")
+    private String fileUrlBaseUrl;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd");
 
@@ -84,8 +85,8 @@ public class FileController {
             Path targetPath = targetDir.resolve(uniqueFilename);
             Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
 
-            // 6. 构建访问URL
-            String fileUrl = serverBaseUrl + "/api/files/download?filename=" + relativePath + "/" + uniqueFilename;
+            // 6. 构建访问URL（供前端浏览器访问）
+            String fileUrl = fileUrlBaseUrl + "/download?filename=" + relativePath + "/" + uniqueFilename;
 
             result.put("success", true);
             result.put("filename", uniqueFilename);
@@ -162,7 +163,7 @@ public class FileController {
         // 防止路径遍历攻击
         String safePath = path.replace("..", "");
 
-        String url = serverBaseUrl + "/api/files/download?filename=" + safePath;
+        String url = fileUrlBaseUrl + "/download?filename=" + safePath;
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
