@@ -113,8 +113,8 @@ public class FileController {
     @GetMapping("/download")
     public ResponseEntity<byte[]> downloadFile(@RequestParam("filename") String filename) {
         try {
-            // 防止路径遍历攻击
-            String safeFilename = filename.replace("..", "").replace("/", "").replace("\\", "");
+            // 防止路径遍历攻击（只移除..，保留正常的路径分隔符）
+            String safeFilename = filename.replace("..", "");
             Path filePath = Paths.get(uploadBasePath, safeFilename);
 
             if (!filePath.startsWith(Paths.get(uploadBasePath))) {

@@ -168,7 +168,8 @@ public class ViolationService {
         }
 
         // 2. Redis 中没有，从 MySQL 查询（分页）
-        Pageable pageable = PageRequest.of(page - 1, size);
+        // 注意:前端已经将page转换为0-based(page-1),所以这里直接使用page
+        Pageable pageable = PageRequest.of(page, size);
         Page<Violation> violationPage = violationRepository.findAll(pageable);
 
         // 3. 将查询结果写回 Redis 缓存
@@ -189,7 +190,8 @@ public class ViolationService {
      * 带筛选条件的查询
      */
     private List<Map<String, Object>> getViolationsWithFilter(int page, int size, String search, String type) {
-        Pageable pageable = PageRequest.of(page - 1, size);
+        // 注意:前端已经将page转换为0-based(page-1),所以这里直接使用page
+        Pageable pageable = PageRequest.of(page, size);
         List<Violation> violations;
 
         if (type != null && !type.isEmpty()) {

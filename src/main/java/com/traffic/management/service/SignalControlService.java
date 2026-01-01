@@ -38,7 +38,7 @@ public class SignalControlService {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Value("${ai.service.base-url:http://116.172.94.84:5000}")
+    @Value("${ai.service.base-url:https://u836978-a67f-943bbb9f.westc.gpuhub.com:8443}")
     private String aiServerUrl;
     
     @Value("${ai.service.control-endpoint:/api/control}")
