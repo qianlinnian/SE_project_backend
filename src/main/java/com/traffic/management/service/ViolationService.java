@@ -354,18 +354,18 @@ public class ViolationService {
         map.put("id", violation.getId());
         map.put("intersectionId", violation.getIntersectionId());
         map.put("plateNumber", violation.getPlateNumber());
-        map.put("violationType", violation.getViolationType().toString());
+        map.put("violationType", violation.getViolationType() != null ? violation.getViolationType().toString() : null);
         map.put("imageUrl", violation.getImageUrl());
         map.put("aiConfidence", violation.getAiConfidence());
-        map.put("occurredAt", violation.getOccurredAt().toString());
-        map.put("status", violation.getStatus().toString());
+        map.put("occurredAt", violation.getOccurredAt() != null ? violation.getOccurredAt().toString() : null);
+        map.put("status", violation.getStatus() != null ? violation.getStatus().toString() : null);
         map.put("processedBy", violation.getProcessedBy());
         map.put("processedAt", violation.getProcessedAt() != null ? violation.getProcessedAt().toString() : null);
         map.put("penaltyAmount", violation.getPenaltyAmount());
         map.put("reviewNotes", violation.getReviewNotes());
-        map.put("appealStatus", violation.getAppealStatus().toString());
-        map.put("createdAt", violation.getCreatedAt().toString());
-        map.put("updatedAt", violation.getUpdatedAt().toString());
+        map.put("appealStatus", violation.getAppealStatus() != null ? violation.getAppealStatus().toString() : null);
+        map.put("createdAt", violation.getCreatedAt() != null ? violation.getCreatedAt().toString() : null);
+        map.put("updatedAt", violation.getUpdatedAt() != null ? violation.getUpdatedAt().toString() : null);
         return map;
     }
 
