@@ -250,12 +250,17 @@ class BackendAPIClient:
         """
         import os
 
+        print(f"[上传图片] 开始: {image_path}")
+
         if not os.path.exists(image_path):
-            print(f"[API]  文件不存在: {image_path}")
+            print(f"[上传图片] ❌ 文件不存在: {image_path}")
             return f"file://{image_path}"
 
         try:
             url = f"{self.base_url}/files/upload"
+            file_size = os.path.getsize(image_path)
+            print(f"[上传图片] URL={url}, 大小={file_size}B, Token={self.jwt_token[:10] if self.jwt_token else 'None'}...")
+
             with open(image_path, 'rb') as f:
                 files = {'file': (os.path.basename(image_path), f, 'image/jpeg')}
                 data = {'type': 'violation'}
@@ -265,6 +270,8 @@ class BackendAPIClient:
                 }
                 response = requests.post(url, files=files, data=data, headers=headers, timeout=5)
 
+            print(f"[上传图片] 响应: HTTP {response.status_code}")
+
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
@@ -272,12 +279,14 @@ class BackendAPIClient:
                     print(f"[API]  图片上传成功: {image_url}")
                     return image_url
                 else:
-                    print(f"[API]  图片上传失败: {result.get('message')}")
+                    print(f"[上传图片] ❌ 后端返回失败: {result.get('message')}")
+                    print(f"[上传图片] 完整响应: {result}")
             elif response.status_code == 401:
                 # Token过期，尝试重新登录并重试
-                print(f"[API]  Token过期，重新登录...")
+                print(f"[上传图片] ⚠️ Token过期(401)，尝试重新登录...")
                 self._login()
                 if self.jwt_token:
+                    print(f"[上传图片] 重新登录成功，重试上传...")
                     try:
                         # 重试上传
                         with open(image_path, 'rb') as f:
@@ -286,25 +295,36 @@ class BackendAPIClient:
                             headers = {'Authorization': f'Bearer {self.jwt_token}'}
                             retry_response = requests.post(url, files=files, data=data, headers=headers, timeout=5)
 
+                            print(f"[上传图片] 重试响应: HTTP {retry_response.status_code}")
+
                             if retry_response.status_code == 200:
                                 result = retry_response.json()
                                 if result.get('success'):
                                     image_url = result.get('url')
-                                    print(f"[API]  图片上传成功(重试): {image_url}")
+                                    print(f"[上传图片] ✅ 重试成功: {image_url}")
                                     return image_url
+                                else:
+                                    print(f"[上传图片] ❌ 重试失败: {result}")
+                            else:
+                                print(f"[上传图片] ❌ 重试HTTP错误: {retry_response.status_code}")
                     except Exception as retry_error:
-                        print(f"[API]  重试上传失败: {retry_error}")
-                print(f"[API]  重新登录后上传仍然失败")
+                        print(f"[上传图片] ❌ 重试异常: {retry_error}")
+                        import traceback
+                        traceback.print_exc()
+                else:
+                    print(f"[上传图片] ❌ 重新登录失败，无法获取Token")
             else:
-                print(f"[API]  图片上传失败 HTTP {response.status_code}")
+                print(f"[上传图片] ❌ HTTP错误 {response.status_code}")
                 try:
                     error_detail = response.json()
-                    print(f"[API]  错误详情: {error_detail}")
+                    print(f"[上传图片] 错误详情(JSON): {error_detail}")
                 except:
-                    print(f"[API]  错误详情: {response.text}")
+                    print(f"[上传图片] 错误详情(TEXT): {response.text[:200]}")
 
         except Exception as e:
-            print(f"[API]  图片上传异常: {type(e).__name__}: {e}")
+            print(f"[上传图片] ❌ 异常: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
 
         # 上传失败，返回本地路径作为备选
         return f"file://{image_path}"

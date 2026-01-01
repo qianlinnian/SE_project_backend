@@ -801,7 +801,7 @@ class ViolationDetector:
         """
         dx = end_pos[0] - start_pos[0]
         dy = end_pos[1] - start_pos[1]
-        threshold = 10
+        threshold = 8
 
         if self.is_rotated_view:
             # rois2.json: 东西向为竖直，南北向为水平
