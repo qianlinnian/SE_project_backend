@@ -121,12 +121,12 @@ SIGNAL_SYNC_INTERVAL = 2  # 从后端获取信号灯状态的间隔（秒）
 backend_signal_fetcher = None  # 后台同步任务
 
 # 信号灯数据源模式
-# 可选值: 'auto' (优先后端，降级到模拟), 'backend' (仅后端), 'simulation' (仅模拟), 'manual' (手动设置)
+# 可选值: 'backend' (从后端获取), 'simulation' (时间模拟), 'manual' (手动设置)
 signal_source_mode = 'manual'
 signal_mode_lock = threading.Lock()
 
 # 当前实际使用的数据源 ('backend' 或 'simulation' 或 'manual')
-current_active_source = 'unknown'
+current_active_source = 'manual'
 last_source_check_time = None
 
 
@@ -142,10 +142,9 @@ def fetch_signal_states_from_backend():
     3. 时间模拟 (兜底) - 基于系统时间的固定周期模拟
 
     模式说明：
-    - 'auto': 优先LLM → Java后端 → 时间模拟 (三级降级)
-    - 'backend': 仅从 Java 后端获取，失败时不更新
+    - 'backend': 仅从 Java 后端获取
     - 'simulation': 仅使用时间模拟，不调用后端
-    - 'manual': 手动设置模式，不自动更新
+    - 'manual': 手动设置模式，不自动更新（默认）
 
     LLM信号相位映射：
     - ETWT: 东西直行通行 → east/west=green, north/south=red
@@ -181,7 +180,7 @@ def fetch_signal_states_from_backend():
         return True
 
     # ==================== 第一优先级：尝试从LLM获取 ====================
-    if mode in ['auto']:
+    if mode == 'backend':
         try:
             # 导入BackendAPIClient
             from api.backend_api_client import BackendAPIClient
@@ -252,7 +251,7 @@ def fetch_signal_states_from_backend():
             print(f"[信号同步] ⚠️ LLM数据不可用，降级到Java后端 - {e}")
 
     # ==================== 第二优先级：尝试从Java后端获取 ====================
-    if mode in ['backend', 'auto']:
+    if mode == 'backend':
         try:
             # 尝试调用 Java 后端获取信号灯状态
             url = f"{BACKEND_BASE_URL}/multi-direction-traffic/intersections/1/status"
@@ -318,21 +317,11 @@ def fetch_signal_states_from_backend():
                 return True
 
         except Exception as e:
-            if mode == 'backend':
-                # 仅后端模式：失败时不降级
-                current_active_source = 'backend_failed'
-                last_source_check_time = datetime.now()
-                print(f"[信号同步] ❌ Java 后端不可用 (模式: backend) - {e}")
-                return False
-            # auto 模式：继续执行下面的模拟逻辑
-            print(f"[信号同步] ⚠️ Java 后端不可用，降级到时间模拟 (模式: auto)")
-
-    # ==================== 第三优先级：使用时间模拟（兜底） ====================
-    if mode == 'auto':
-        current_active_source = 'simulation'
-        last_source_check_time = datetime.now()
-        _use_time_simulation()
-        return True
+            # 后端模式：失败时标记为失败状态
+            current_active_source = 'backend_failed'
+            last_source_check_time = datetime.now()
+            print(f"[信号同步] ❌ Java 后端不可用 (模式: backend) - {e}")
+            return False
 
     return False
 
@@ -715,14 +704,13 @@ def signal_mode():
 
     POST请求体格式:
     {
-        "mode": "auto"  // auto, backend, simulation, manual
+        "mode": "manual"  // backend, simulation, manual
     }
 
     模式说明:
-    - auto: 优先LLM → Java后端 → 时间模拟 (三级降级, 推荐)
     - backend: 仅使用Java后端数据
     - simulation: 仅使用时间模拟
-    - manual: 手动模式，不自动更新
+    - manual: 手动模式，不自动更新（默认）
     """
     global signal_source_mode
 
@@ -757,7 +745,7 @@ def signal_mode():
             new_mode = data.get('mode', '').lower()
 
             # 验证模式
-            valid_modes = ['auto', 'backend', 'simulation', 'manual']
+            valid_modes = ['backend', 'simulation', 'manual']
             if new_mode not in valid_modes:
                 return jsonify({
                     "success": False,
@@ -770,10 +758,9 @@ def signal_mode():
                 signal_source_mode = new_mode
 
             print(f"\n[信号灯模式] 切换: {old_mode} → {new_mode}")
-            print(f"  - auto: 优先LLM → Java后端 → 时间模拟 (三级降级)")
             print(f"  - backend: 仅使用Java后端数据")
             print(f"  - simulation: 仅使用时间模拟")
-            print(f"  - manual: 手动模式，不自动更新")
+            print(f"  - manual: 手动模式，不自动更新（默认）")
 
             return jsonify({
                 "success": True,
@@ -810,31 +797,28 @@ def get_signal_source_mode():
     返回:
     {
         "success": true,
-        "mode": "auto",  // 设置的模式: auto/backend/simulation/manual
-        "description": "优先后端，降级到模拟",
-        "activeSource": "backend",  // 实际使用的数据源: backend/simulation/manual/backend_failed/unknown
+        "mode": "manual",  // 设置的模式: backend/simulation/manual
+        "description": "手动设置",
+        "activeSource": "manual",  // 实际使用的数据源: backend/simulation/manual/backend_failed
         "lastCheckTime": "2025-12-26T17:30:45",
         "availableModes": {
-            "auto": "优先后端，降级到模拟",
             "backend": "仅后端",
             "simulation": "仅模拟",
-            "manual": "手动设置"
+            "manual": "手动设置（默认）"
         }
     }
     """
     mode_descriptions = {
-        'auto': '优先后端，降级到模拟',
         'backend': '仅后端',
         'simulation': '仅模拟',
-        'manual': '手动设置'
+        'manual': '手动设置（默认）'
     }
 
     source_descriptions = {
-        'backend': '✅ Java 后端',
-        'simulation': '🔄 时间模拟',
-        'manual': '🎮 手动设置',
-        'backend_failed': '❌ 后端失败',
-        'unknown': '❓ 未知'
+        'backend': 'Java 后端',
+        'simulation': '时间模拟',
+        'manual': '手动设置',
+        'backend_failed': '后端失败'
     }
 
     with signal_mode_lock:
@@ -858,14 +842,13 @@ def set_signal_source_mode():
 
     请求体:
     {
-        "mode": "auto"  // auto/backend/simulation/manual
+        "mode": "manual"  // backend/simulation/manual
     }
 
     模式说明:
-    - auto: 优先从 Java 后端获取，失败时降级到时间模拟（默认）
     - backend: 仅从 Java 后端获取，失败时不更新信号
     - simulation: 仅使用时间模拟，不调用后端
-    - manual: 手动设置模式，不自动更新（需配合 POST /api/traffic 使用）
+    - manual: 手动设置模式，不自动更新（默认，需配合 POST /api/traffic 使用）
     """
     global signal_source_mode
 
@@ -879,7 +862,7 @@ def set_signal_source_mode():
             }), 400
 
         new_mode = data['mode']
-        valid_modes = ['auto', 'backend', 'simulation', 'manual']
+        valid_modes = ['backend', 'simulation', 'manual']
 
         if new_mode not in valid_modes:
             return jsonify({
