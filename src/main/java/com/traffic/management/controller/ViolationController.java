@@ -47,7 +47,7 @@ public class ViolationController {
     // GET /api/violations : 查询违章记录列表
     @GetMapping("/violations")
     public Map<String, Object> getViolations(
-            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "0") int page,  // 改为0-based，与前端保持一致
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String type) {
@@ -57,7 +57,7 @@ public class ViolationController {
         return Map.of(
                 "violations", violations,
                 "total", total,
-                "page", page,
+                "page", page + 1,  // 返回给前端时转换为1-based显示
                 "size", size
         );
     }
