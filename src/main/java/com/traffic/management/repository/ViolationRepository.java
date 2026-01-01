@@ -144,4 +144,16 @@ public interface ViolationRepository extends JpaRepository<Violation, Long> {
     List<Object[]> getHeatmapData(
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime);
+
+    /**
+     * 按路口ID分组统计
+     */
+    @Query("SELECT v.intersectionId as intersectionId, COUNT(v) as count " +
+           "FROM Violation v " +
+           "WHERE v.occurredAt BETWEEN :startTime AND :endTime " +
+           "GROUP BY v.intersectionId " +
+           "ORDER BY count DESC")
+    List<Object[]> countByIntersectionGrouped(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
 }

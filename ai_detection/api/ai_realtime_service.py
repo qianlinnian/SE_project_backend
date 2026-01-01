@@ -122,7 +122,7 @@ backend_signal_fetcher = None  # 后台同步任务
 
 # 信号灯数据源模式
 # 可选值: 'auto' (优先后端，降级到模拟), 'backend' (仅后端), 'simulation' (仅模拟), 'manual' (手动设置)
-signal_source_mode = 'auto'
+signal_source_mode = 'manual'
 signal_mode_lock = threading.Lock()
 
 # 当前实际使用的数据源 ('backend' 或 'simulation' 或 'manual')
