@@ -121,12 +121,12 @@ SIGNAL_SYNC_INTERVAL = 2  # 从后端获取信号灯状态的间隔（秒）
 backend_signal_fetcher = None  # 后台同步任务
 
 # 信号灯数据源模式
-# 可选值: 'backend' (从后端获取), 'simulation' (时间模拟), 'manual' (手动设置)
-signal_source_mode = 'manual'
+# 可选值: 'llm' (从LLM获取), 'backend' (从Java后端获取), 'simulation' (时间模拟)
+signal_source_mode = 'llm'
 signal_mode_lock = threading.Lock()
 
-# 当前实际使用的数据源 ('backend' 或 'simulation' 或 'manual')
-current_active_source = 'manual'
+# 当前实际使用的数据源 ('llm', 'backend', 'simulation')
+current_active_source = 'llm'
 last_source_check_time = None
 
 
@@ -134,17 +134,12 @@ last_source_check_time = None
 
 def fetch_signal_states_from_backend():
     """
-    根据当前模式获取信号灯状态（三级降级策略）
-
-    优先级顺序:
-    1. LLM交通数据 (最优) - 从 GET /api/traffic/latest 获取路口信号相位
-    2. Java后端数据 (备选) - 从 /multi-direction-traffic/intersections/1/status 获取
-    3. 时间模拟 (兜底) - 基于系统时间的固定周期模拟
+    根据当前模式获取信号灯状态
 
     模式说明：
-    - 'backend': 仅从 Java 后端获取
-    - 'simulation': 仅使用时间模拟，不调用后端
-    - 'manual': 手动设置模式，不自动更新（默认）
+    - 'llm': 从 LLM 获取数据（直接获取，无降级）
+    - 'backend': 从 Java 后端获取数据（直接获取，无降级）
+    - 'simulation': 使用时间模拟，不调用后端
 
     LLM信号相位映射：
     - ETWT: 东西直行通行 → east/west=green, north/south=red
@@ -166,59 +161,43 @@ def fetch_signal_states_from_backend():
     with signal_mode_lock:
         mode = signal_source_mode
 
-    # 手动模式：不自动更新
-    if mode == 'manual':
-        current_active_source = 'manual'
-        last_source_check_time = datetime.now()
-        return True
-
-    # 仅模拟模式：直接跳到模拟逻辑
+    # 模拟模式：直接跳到模拟逻辑
     if mode == 'simulation':
         current_active_source = 'simulation'
         last_source_check_time = datetime.now()
         _use_time_simulation()
         return True
 
-    # ==================== 第一优先级：尝试从LLM获取 ====================
-    if mode == 'backend':
+    # ==================== 从LLM获取数据 ====================
+    if mode == 'llm':
         try:
-            # 导入BackendAPIClient
             from api.backend_api_client import BackendAPIClient
-
-            # 创建客户端（会自动登录）
             client = BackendAPIClient(base_url=BACKEND_BASE_URL)
-
-            # 获取路口0的LLM数据
             llm_data = client.get_intersection_llm_data(intersection_id=0)
 
             if llm_data:
                 signal_phase = llm_data.get('signal_phase')
 
                 if signal_phase:
-                    # 解析LLM信号相位
                     new_states, new_left_turns = _parse_llm_signal_phase(signal_phase)
 
                     if new_states:
                         state_changed = False
-
-                        # 检查状态是否变化
                         for direction in new_states:
                             if current_signal_states.get(direction, '') != new_states[direction]:
                                 state_changed = True
                             if current_left_turn_signals.get(direction, '') != new_left_turns[direction]:
                                 state_changed = True
 
-                        # 更新信号灯状态
                         with signal_lock:
                             current_signal_states.update(new_states)
                             current_left_turn_signals.update(new_left_turns)
 
-                        # 记录成功使用LLM
                         current_active_source = 'llm'
                         last_source_check_time = datetime.now()
 
                         if state_changed:
-                            print(f"[信号同步] ✅ 从 LLM 获取 (模式: {mode}, 相位: {signal_phase})")
+                            print(f"[信号同步] ✅ 从 LLM 获取 (相位: {signal_phase})")
                             for direction in new_states.keys():
                                 straight = new_states[direction]
                                 left = new_left_turns[direction]
@@ -226,31 +205,28 @@ def fetch_signal_states_from_backend():
                                 left_emoji = "🟢" if left == "green" else "🔴" if left == "red" else "🟡"
                                 print(f"  {direction}: 直行={straight} {straight_emoji} | 左转={left} {left_emoji}")
 
-                            # 推送给前端
-                            print(f"[WebSocket] 📡 准备发送LLM信号灯数据到前端...")
-
-                            data_to_send = {
+                            socketio.emit('traffic', {
                                 'signals': convert_to_serializable(current_signal_states.copy()),
                                 'leftTurnSignals': convert_to_serializable(current_left_turn_signals.copy()),
                                 'source': 'llm',
                                 'llm_phase': signal_phase
-                            }
-
-                            socketio.emit('traffic', data_to_send)
-
-                            print(f"[WebSocket] ✅ LLM信号灯数据已发送!")
-                            print(f"[WebSocket]    - source: 'llm'")
-                            print(f"[WebSocket]    - phase: '{signal_phase}'")
-                            print(f"[WebSocket]    - signals: {data_to_send['signals']}")
-                            print(f"[WebSocket]    - leftTurnSignals: {data_to_send['leftTurnSignals']}")
+                            })
 
                         return True
+                else:
+                    print(f"[信号同步] ⚠️ LLM数据中没有signal_phase")
+            else:
+                print(f"[信号同步] ⚠️ LLM数据为空")
 
         except Exception as e:
-            # LLM获取失败，降级到Java后端
-            print(f"[信号同步] ⚠️ LLM数据不可用，降级到Java后端 - {e}")
+            print(f"[信号同步] ❌ 从LLM获取失败 - {e}")
 
-    # ==================== 第二优先级：尝试从Java后端获取 ====================
+        # LLM模式失败，标记为失败状态
+        current_active_source = 'llm_failed'
+        last_source_check_time = datetime.now()
+        return False
+
+    # ==================== 从Java后端获取数据 ====================
     if mode == 'backend':
         try:
             # 尝试调用 Java 后端获取信号灯状态
@@ -704,13 +680,13 @@ def signal_mode():
 
     POST请求体格式:
     {
-        "mode": "manual"  // backend, simulation, manual
+        "mode": "llm"  // llm, backend, simulation
     }
 
     模式说明:
-    - backend: 仅使用Java后端数据
-    - simulation: 仅使用时间模拟
-    - manual: 手动模式，不自动更新（默认）
+    - llm: 从LLM获取数据
+    - backend: 从Java后端获取数据
+    - simulation: 使用时间模拟
     """
     global signal_source_mode
 
@@ -745,7 +721,7 @@ def signal_mode():
             new_mode = data.get('mode', '').lower()
 
             # 验证模式
-            valid_modes = ['backend', 'simulation', 'manual']
+            valid_modes = ['llm', 'backend', 'simulation']
             if new_mode not in valid_modes:
                 return jsonify({
                     "success": False,
@@ -797,27 +773,28 @@ def get_signal_source_mode():
     返回:
     {
         "success": true,
-        "mode": "manual",  // 设置的模式: backend/simulation/manual
-        "description": "手动设置",
-        "activeSource": "manual",  // 实际使用的数据源: backend/simulation/manual/backend_failed
+        "mode": "llm",  // 设置的模式: llm/backend/simulation
+        "description": "LLM 数据",
+        "activeSource": "llm",  // 实际使用的数据源: llm/backend/simulation/llm_failed/backend_failed
         "lastCheckTime": "2025-12-26T17:30:45",
         "availableModes": {
-            "backend": "仅后端",
-            "simulation": "仅模拟",
-            "manual": "手动设置（默认）"
+            "llm": "LLM 数据",
+            "backend": "Java 后端",
+            "simulation": "时间模拟"
         }
     }
     """
     mode_descriptions = {
-        'backend': '仅后端',
-        'simulation': '仅模拟',
-        'manual': '手动设置（默认）'
+        'llm': 'LLM 数据',
+        'backend': 'Java 后端',
+        'simulation': '时间模拟'
     }
 
     source_descriptions = {
+        'llm': 'LLM 数据',
         'backend': 'Java 后端',
         'simulation': '时间模拟',
-        'manual': '手动设置',
+        'llm_failed': 'LLM 失败',
         'backend_failed': '后端失败'
     }
 
@@ -831,7 +808,7 @@ def get_signal_source_mode():
         "activeSource": current_active_source,
         "activeSourceDescription": source_descriptions.get(current_active_source, "未知"),
         "lastCheckTime": last_source_check_time.isoformat() if last_source_check_time else None,
-        "availableModes": mode_descriptions
+        "availableMode": mode_descriptions
     })
 
 
@@ -842,13 +819,13 @@ def set_signal_source_mode():
 
     请求体:
     {
-        "mode": "manual"  // backend/simulation/manual
+        "mode": "llm"  // llm/backend/simulation
     }
 
     模式说明:
-    - backend: 仅从 Java 后端获取，失败时不更新信号
-    - simulation: 仅使用时间模拟，不调用后端
-    - manual: 手动设置模式，不自动更新（默认，需配合 POST /api/traffic 使用）
+    - llm: 从 LLM 获取数据
+    - backend: 从 Java 后端获取数据
+    - simulation: 使用时间模拟
     """
     global signal_source_mode
 
@@ -862,7 +839,7 @@ def set_signal_source_mode():
             }), 400
 
         new_mode = data['mode']
-        valid_modes = ['backend', 'simulation', 'manual']
+        valid_modes = ['llm', 'backend', 'simulation']
 
         if new_mode not in valid_modes:
             return jsonify({

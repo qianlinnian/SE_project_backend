@@ -1,6 +1,9 @@
 package com.traffic.management.controller;
 
+import com.traffic.management.dto.traffic.IntersectionDTO;
+import com.traffic.management.dto.traffic.TrafficDataDTO;
 import com.traffic.management.service.RedisService;
+import com.traffic.management.service.TrafficDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,6 +15,9 @@ public class TrafficMonitorController {
 
     @Autowired
     private RedisService redisService;
+
+    @Autowired
+    private TrafficDataService trafficDataService;
 
     // GET /api/intersections : 获取所有路口列表及基础信息
     @GetMapping("/intersections")
@@ -45,10 +51,50 @@ public class TrafficMonitorController {
         return redisService.getDashboardStats();
     }
 
-    // GET /api/dashboard/heatmap : 车辆分布热力图数据
+    // GET /api/dashboard/heatmap : 车辆分布热力图数据（基于LLM实时交通数据）
     @GetMapping("/dashboard/heatmap")
     public List<Map<String, Object>> getHeatmapData() {
-        return redisService.getHeatmapData();
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        // 从 TrafficDataService 获取LLM最新交通数据
+        TrafficDataDTO trafficData = trafficDataService.getLatestTrafficData();
+        if (trafficData == null || trafficData.getIntersections() == null) {
+            return result;
+        }
+
+        // 转换每个路口的数据为热力图格式
+        for (IntersectionDTO intersection : trafficData.getIntersections()) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("intersectionId", intersection.getId());
+            item.put("queueLength", intersection.getQueueLength());
+            item.put("vehicleCount", intersection.getVehicleCount());
+            item.put("signalPhase", intersection.getSignalPhase());
+
+            // 计算拥堵级别
+            int queueLength = intersection.getQueueLength() != null ? intersection.getQueueLength() : 0;
+            String congestionLevel = calculateCongestionLevel(queueLength);
+            item.put("congestionLevel", congestionLevel);
+
+            result.add(item);
+        }
+
+        return result;
+    }
+
+    /**
+     * 计算拥堵级别
+     * queue_length > 10: 严重拥堵 (severe)
+     * queue_length > 5: 轻度拥堵 (mild)
+     * else: 畅通 (clear)
+     */
+    private String calculateCongestionLevel(int queueLength) {
+        if (queueLength > 10) {
+            return "severe";
+        } else if (queueLength > 5) {
+            return "mild";
+        } else {
+            return "clear";
+        }
     }
 
     // 模拟设置路口数据（用于测试）
