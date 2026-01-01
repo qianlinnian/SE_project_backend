@@ -106,7 +106,24 @@ public class TrafficDataService {
         String json = redisTemplate.opsForValue().get(REDIS_KEY_LATEST_TRAFFIC);
         if (json == null) return null;
         try {
-            return objectMapper.readValue(json, TrafficDataDTO.class);
+            TrafficDataDTO dto = objectMapper.readValue(json, TrafficDataDTO.class);
+
+            // 计算总计值（如果LLM没有提供）
+            if (dto.getTotalQueue() == null && dto.getIntersections() != null) {
+                int totalQueue = dto.getIntersections().stream()
+                        .mapToInt(IntersectionDTO::getQueueLength)
+                        .sum();
+                dto.setTotalQueue(totalQueue);
+            }
+
+            if (dto.getTotalVehicles() == null && dto.getIntersections() != null) {
+                int totalVehicles = dto.getIntersections().stream()
+                        .mapToInt(IntersectionDTO::getVehicleCount)
+                        .sum();
+                dto.setTotalVehicles(totalVehicles);
+            }
+
+            return dto;
         } catch (Exception e) {
             log.error("Error parsing traffic data from Redis", e);
             return null;
