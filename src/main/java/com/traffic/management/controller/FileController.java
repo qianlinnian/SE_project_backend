@@ -142,37 +142,6 @@ public class FileController {
     }
 
     /**
-     * 获取文件URL
-     *
-     * POST /api/files/get-url
-     *
-     * @param path 文件路径
-     * @return 文件访问URL
-     */
-    @PostMapping("/get-url")
-    public ResponseEntity<Map<String, Object>> getFileUrl(@RequestBody Map<String, String> request) {
-        String path = request.get("path");
-
-        if (path == null || path.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "缺少文件路径"
-            ));
-        }
-
-        // 防止路径遍历攻击
-        String safePath = path.replace("..", "");
-
-        String url = fileUrlBaseUrl + "/download?filename=" + safePath;
-
-        return ResponseEntity.ok(Map.of(
-                "success", true,
-                "path", safePath,
-                "url", url
-        ));
-    }
-
-    /**
      * 获取文件扩展名
      */
     private String getFileExtension(String filename) {

@@ -30,6 +30,14 @@ BEGIN
                 JSON_OBJECT('plate_number', NEW.plate_number, 'violation_type', NEW.violation_type, 'penalty_amount', NEW.penalty_amount),
                 NOW());
     END IF;
+    -- 当违章从PENDING变为REJECTED时，检查是否需要初始化申诉状态
+    IF OLD.status = 'PENDING' AND NEW.status = 'REJECTED' THEN
+        -- 这里可以添加自动通知逻辑
+        INSERT INTO audit_logs (operator_id, operation_type, target_type, target_id, operation_details, created_at)
+        VALUES (NEW.processed_by, 'REJECT_VIOLATION', 'VIOLATION', NEW.id, 
+                JSON_OBJECT('plate_number', NEW.plate_number, 'violation_type', NEW.violation_type, 'penalty_amount', NEW.penalty_amount),
+                NOW());
+    END IF;
     
     -- 当申诉被批准时，更新违章的申诉状态
     IF OLD.appeal_status != NEW.appeal_status AND NEW.appeal_status = 'APPEALED' THEN
@@ -76,12 +84,6 @@ BEGIN
 END$$
 
 DELIMITER ;
-
--- ============================================================
--- 触发器3和4已移除
--- 说明: 用户创建和删除操作的日志记录改为由应用层控制
---       这样可以正确记录操作人信息(operator_id)
--- ============================================================
 
 -- ============================================================
 -- 存储过程1: 批量生成日报数据

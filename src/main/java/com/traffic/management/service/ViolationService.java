@@ -256,7 +256,18 @@ public class ViolationService {
                 Violation violation = violationOpt.get();
 
                 // 1. 更新 Violation 对象
-                violation.setStatus(Violation.ViolationStatus.CONFIRMED);
+                // 根据前端传来的 status 设置状态
+                if (processInfo.containsKey("status")) {
+                    String statusStr = processInfo.get("status").toString();
+                    try {
+                        violation.setStatus(Violation.ViolationStatus.valueOf(statusStr));
+                    } catch (IllegalArgumentException e) {
+                        // 如果状态值无效，保持为 CONFIRMED
+                        violation.setStatus(Violation.ViolationStatus.CONFIRMED);
+                    }
+                } else {
+                    violation.setStatus(Violation.ViolationStatus.CONFIRMED);
+                }
                 violation.setProcessedAt(LocalDateTime.now());
                 if (processInfo.containsKey("processedBy")) {
                     violation.setProcessedBy(Long.parseLong(processInfo.get("processedBy").toString()));
