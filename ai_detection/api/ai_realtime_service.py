@@ -121,11 +121,11 @@ SIGNAL_SYNC_INTERVAL = 2  # 从后端获取信号灯状态的间隔（秒）
 backend_signal_fetcher = None  # 后台同步任务
 
 # 信号灯数据源模式
-# 可选值: 'llm' (从LLM获取), 'backend' (从Java后端获取), 'simulation' (时间模拟)
+# 可选值: 'llm' (从LLM获取), 'backend' (从Java后端获取), 'simulation' (时间模拟), 'stop' (停止同步)
 signal_source_mode = 'llm'
 signal_mode_lock = threading.Lock()
 
-# 当前实际使用的数据源 ('llm', 'backend', 'simulation')
+# 当前实际使用的数据源 ('llm', 'backend', 'simulation', 'stop')
 current_active_source = 'llm'
 last_source_check_time = None
 
@@ -140,6 +140,7 @@ def fetch_signal_states_from_backend():
     - 'llm': 从 LLM 获取数据（直接获取，无降级）
     - 'backend': 从 Java 后端获取数据（直接获取，无降级）
     - 'simulation': 使用时间模拟，不调用后端
+    - 'stop': 停止信号灯同步，保持当前状态不变
 
     LLM信号相位映射：
     - ETWT: 东西直行通行 → east/west=green, north/south=red
@@ -160,6 +161,12 @@ def fetch_signal_states_from_backend():
     # 获取当前模式
     with signal_mode_lock:
         mode = signal_source_mode
+
+    # 停止模式：不更新信号灯状态
+    if mode == 'stop':
+        current_active_source = 'stop'
+        # 不更新 last_source_check_time，保持上次同步时间
+        return True
 
     # 模拟模式：直接跳到模拟逻辑
     if mode == 'simulation':
@@ -548,6 +555,7 @@ def start_signal_sync_task():
             start_time = time.time()
             try:
                 # 在独立线程中执行，避免阻塞主循环
+                # 如果模式为 'stop'，fetch_signal_states_from_backend 会直接返回不更新
                 fetch_signal_states_from_backend()
             except Exception as e:
                 print(f"[信号同步] 异常: {e}")
@@ -680,13 +688,14 @@ def signal_mode():
 
     POST请求体格式:
     {
-        "mode": "llm"  // llm, backend, simulation
+        "mode": "llm"  // llm, backend, simulation, stop
     }
 
     模式说明:
     - llm: 从LLM获取数据
     - backend: 从Java后端获取数据
     - simulation: 使用时间模拟
+    - stop: 停止信号灯同步，保持当前状态
     """
     global signal_source_mode
 
@@ -721,7 +730,7 @@ def signal_mode():
             new_mode = data.get('mode', '').lower()
 
             # 验证模式
-            valid_modes = ['llm', 'backend', 'simulation']
+            valid_modes = ['llm', 'backend', 'simulation', 'stop']
             if new_mode not in valid_modes:
                 return jsonify({
                     "success": False,
@@ -734,9 +743,14 @@ def signal_mode():
                 signal_source_mode = new_mode
 
             print(f"\n[信号灯模式] 切换: {old_mode} → {new_mode}")
-            print(f"  - backend: 仅使用Java后端数据")
-            print(f"  - simulation: 仅使用时间模拟")
-            print(f"  - manual: 手动模式，不自动更新（默认）")
+            if new_mode == 'llm':
+                print(f"  - llm: 从LLM获取数据")
+            elif new_mode == 'backend':
+                print(f"  - backend: 从Java后端获取数据")
+            elif new_mode == 'simulation':
+                print(f"  - simulation: 使用时间模拟")
+            elif new_mode == 'stop':
+                print(f"  - stop: ⏸️  停止信号灯同步")
 
             return jsonify({
                 "success": True,
@@ -773,27 +787,30 @@ def get_signal_source_mode():
     返回:
     {
         "success": true,
-        "mode": "llm",  // 设置的模式: llm/backend/simulation
+        "mode": "llm",  // 设置的模式: llm/backend/simulation/stop
         "description": "LLM 数据",
-        "activeSource": "llm",  // 实际使用的数据源: llm/backend/simulation/llm_failed/backend_failed
+        "activeSource": "llm",  // 实际使用的数据源: llm/backend/simulation/stop/llm_failed/backend_failed
         "lastCheckTime": "2025-12-26T17:30:45",
         "availableModes": {
             "llm": "LLM 数据",
             "backend": "Java 后端",
-            "simulation": "时间模拟"
+            "simulation": "时间模拟",
+            "stop": "停止同步"
         }
     }
     """
     mode_descriptions = {
         'llm': 'LLM 数据',
         'backend': 'Java 后端',
-        'simulation': '时间模拟'
+        'simulation': '时间模拟',
+        'stop': '停止同步'
     }
 
     source_descriptions = {
         'llm': 'LLM 数据',
         'backend': 'Java 后端',
         'simulation': '时间模拟',
+        'stop': '停止同步',
         'llm_failed': 'LLM 失败',
         'backend_failed': '后端失败'
     }
@@ -819,13 +836,14 @@ def set_signal_source_mode():
 
     请求体:
     {
-        "mode": "llm"  // llm/backend/simulation
+        "mode": "llm"  // llm/backend/simulation/stop
     }
 
     模式说明:
     - llm: 从 LLM 获取数据
     - backend: 从 Java 后端获取数据
     - simulation: 使用时间模拟
+    - stop: 停止信号灯同步，保持当前状态
     """
     global signal_source_mode
 
@@ -839,7 +857,7 @@ def set_signal_source_mode():
             }), 400
 
         new_mode = data['mode']
-        valid_modes = ['llm', 'backend', 'simulation']
+        valid_modes = ['llm', 'backend', 'simulation', 'stop']
 
         if new_mode not in valid_modes:
             return jsonify({
@@ -852,6 +870,8 @@ def set_signal_source_mode():
             signal_source_mode = new_mode
 
         print(f"[信号源模式] 已切换: {old_mode} -> {new_mode}")
+        if new_mode == 'stop':
+            print(f"  ⏸️  信号灯同步已停止，将保持当前状态")
 
         return jsonify({
             "success": True,
@@ -1885,7 +1905,14 @@ if __name__ == '__main__':
     print(f"   POST /api/traffic      - 接收信号灯数据")
     print(f"   GET  /api/traffic/status - 获取当前信号灯状态")
     print("=" * 60)
-    print("📡 API 端点 - 图片检测 (新增):")
+    print("📡 API 端点 - 信号灯模式控制:")
+    print(f"   GET  /signal-mode                      - 获取当前模式")
+    print(f"   POST /signal-mode                      - 切换模式 (llm/backend/simulation/stop)")
+    print(f"   GET  /api/traffic/signal-source-mode   - 获取模式详情")
+    print(f"   POST /api/traffic/signal-source-mode   - 设置模式")
+    print(f"   💡 stop 模式: 停止信号灯同步，保持当前状态不变")
+    print("=" * 60)
+    print("📡 API 端点 - 图片检测:")
     print(f"   POST /detect-image         - 检测单张图片文件")
     print(f"   POST /detect-image-base64  - 检测Base64图片")
     print(f"   POST /detect-batch         - 批量检测多张图片")
