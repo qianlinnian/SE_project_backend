@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -156,7 +157,8 @@ public class ViolationService {
 
         // 无筛选条件时，直接从数据库查询（Redis List缓存不支持分页，已移除）
         // 注意:前端已经将page转换为0-based(page-1),所以这里直接使用page
-        Pageable pageable = PageRequest.of(page, size);
+        // 按发生时间倒序排序，最新的记录排在前面
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "occurredAt"));
         Page<Violation> violationPage = violationRepository.findAll(pageable);
 
         // 转换为Map并缓存单条记录
@@ -178,7 +180,8 @@ public class ViolationService {
      */
     private List<Map<String, Object>> getViolationsWithFilter(int page, int size, String search, String type) {
         // 注意:前端已经将page转换为0-based(page-1),所以这里直接使用page
-        Pageable pageable = PageRequest.of(page, size);
+        // 按发生时间倒序排序，最新的记录排在前面
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "occurredAt"));
         List<Violation> violations;
 
         if (type != null && !type.isEmpty()) {
