@@ -117,7 +117,7 @@ current_left_turn_signals = {
 signal_lock = threading.Lock()  # 线程安全锁
 
 # 信号灯同步配置
-SIGNAL_SYNC_INTERVAL = 2  # 从后端获取信号灯状态的间隔（秒）
+SIGNAL_SYNC_INTERVAL = 1  # 从后端获取信号灯状态的间隔（秒）
 backend_signal_fetcher = None  # 后台同步任务
 
 # 信号灯数据源模式
