@@ -115,12 +115,19 @@ public class ViolationService {
             }
         }
 
+        // 8. 获取车辆类型
+        String vehicleType = "other";
+        if (violationData.containsKey("vehicleType")) {
+            vehicleType = violationData.get("vehicleType").toString();
+        }
+
         Violation violation = Violation.builder()
                 .intersectionId(intersectionId)
                 .direction(direction)
                 .turnType(turnType)
                 .plateNumber(plateNumber)
                 .violationType(violationType)
+                .vehicleType(vehicleType)
                 .imageUrl(imageUrl)
                 .aiConfidence(aiConfidence)
                 .occurredAt(LocalDateTime.now())
