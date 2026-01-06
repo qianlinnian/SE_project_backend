@@ -112,8 +112,15 @@ services:
       - ./uploads:/app/uploads
       # AI检测数据目录
       - ./ai_detection/data:/app/data
+      # 临时视频目录
+      - ./ai_detection/temp_videos:/app/temp_videos
+      # 输出视频目录
+      - ./ai_detection/output:/app/output
+      # 违规截图目录
+      - ./ai_detection/output/screenshots:/app/output/screenshots
       # 日志目录
       - ./logs/ai:/app/logs
+
     networks:
       - traffic-network
     depends_on:

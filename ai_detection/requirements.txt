@@ -7,6 +7,9 @@ numpy>=1.24.0
 # 深度学习 (YOLOv8)
 ultralytics>=8.0.0
 
+# 目标追踪 (DeepSORT) - lap 是 ultralytics YOLOv8 追踪必需的依赖
+lap>=0.5.12
+
 # 目标追踪 (DeepSORT)
 # deep-sort-realtime>=1.3.0  # 可选
 

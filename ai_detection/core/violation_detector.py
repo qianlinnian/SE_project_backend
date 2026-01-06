@@ -238,9 +238,10 @@ class ViolationDetector:
                 'direction': self._map_direction_to_api(direction),
                 'turnType': 'STRAIGHT',  # 默认直行
                 'plateNumber': plate_number,
+                'vehicleType': violation_record.get('vehicle_type', 'other'),
                 'violationType': self._map_violation_type_to_api(violation_record.get('type', '')),
                 'imageUrl': image_url,
-                'aiConfidence': 0.95,
+                'aiConfidence': violation_record.get('confidence', 0.95),
                 'occurredAt': timestamp_str
             }
 
@@ -422,7 +423,16 @@ class ViolationDetector:
             }
         }
 
-        for track_id, bbox in tracks:
+        for detection in tracks:
+            # 兼容新格式: (track_id, bbox, confidence, vehicle_type)
+            if len(detection) == 4:
+                track_id, bbox, confidence, vehicle_type = detection
+            else:
+                # 旧格式兼容: (track_id, bbox)
+                track_id, bbox = detection
+                confidence = 0.95
+                vehicle_type = 'car'
+
             x1, y1, x2, y2 = bbox
             # 使用底部中心点（车轮位置）
             vehicle_center = (int((x1 + x2) / 2), int(y2))
@@ -464,7 +474,7 @@ class ViolationDetector:
 
         return lane_mapping
 
-    def detect_red_light_violation(self, track_id: int, bbox, frame, timestamp):
+    def detect_red_light_violation(self, track_id: int, bbox, frame, timestamp, confidence=0.95, vehicle_type='car'):
         """
         检测闯红灯违规
 
@@ -528,6 +538,8 @@ class ViolationDetector:
                                 'id': violation_id,
                                 'type': 'red_light_running',
                                 'track_id': track_id,
+                                'confidence': confidence,
+                                'vehicle_type': vehicle_type,
                                 'direction': direction,
                                 'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
                                 'location': vehicle_center,
@@ -560,7 +572,7 @@ class ViolationDetector:
 
         return None
 
-    def detect_wrong_way(self, track_id: int, current_pos, timestamp, bbox=None, frame=None):
+    def detect_wrong_way(self, track_id: int, current_pos, timestamp, bbox=None, frame=None, confidence=0.95, vehicle_type='car'):
         """
         检测逆行违规
 
@@ -653,6 +665,8 @@ class ViolationDetector:
                             'id': violation_id,
                             'type': 'wrong_way_driving',
                             'track_id': track_id,
+                            'confidence': confidence,
+                            'vehicle_type': vehicle_type,
                             'direction': direction,
                             'lane_type': 'in',
                             'lane_index': lane_idx,
@@ -697,6 +711,8 @@ class ViolationDetector:
                             'id': violation_id,
                             'type': 'wrong_way_driving',
                             'track_id': track_id,
+                            'confidence': confidence,
+                            'vehicle_type': vehicle_type,
                             'direction': direction,
                             'lane_type': 'out',
                             'lane_index': lane_idx,
@@ -839,7 +855,7 @@ class ViolationDetector:
 
         return False
 
-    def detect_lane_change_violation(self, track_id: int, bbox, frame, timestamp):
+    def detect_lane_change_violation(self, track_id: int, bbox, frame, timestamp, confidence=0.95, vehicle_type='car'):
         """
         检测跨实线变道违规 - 基于距离的简化算法
         
@@ -962,11 +978,13 @@ class ViolationDetector:
                         screenshot_path = self.save_violation_screenshot(
                             frame, bbox, violation_id, "lane_change"
                         )
-                        
+
                         violation_record = {
                             'id': violation_id,
                             'type': 'lane_change_across_solid_line',
                             'track_id': track_id,
+                            'confidence': confidence,
+                            'vehicle_type': vehicle_type,
                             'solid_line': line_name,
                             'direction': solid_line['direction'],
                             'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
@@ -1088,7 +1106,7 @@ class ViolationDetector:
 
         Args:
             frame: 当前帧图像
-            detections: 检测结果列表 [(track_id, bbox), ...]
+            detections: 检测结果列表 [(track_id, bbox, confidence, vehicle_type), ...]
                        bbox = (x1, y1, x2, y2)
             timestamp: 时间戳（单位：毫秒 ms）
 
@@ -1097,10 +1115,19 @@ class ViolationDetector:
         """
         frame_violations = []
 
-        for track_id, bbox in detections:
+        for detection in detections:
+            # 兼容新格式: (track_id, bbox, confidence, vehicle_type)
+            if len(detection) == 4:
+                track_id, bbox, confidence, vehicle_type = detection
+            else:
+                # 旧格式兼容: (track_id, bbox)
+                track_id, bbox = detection
+                confidence = 0.95
+                vehicle_type = 'car'
+
             # 1. 闯红灯检测
             red_light_violation = self.detect_red_light_violation(
-                track_id, bbox, frame, timestamp
+                track_id, bbox, frame, timestamp, confidence, vehicle_type
             )
             if red_light_violation:
                 frame_violations.append(red_light_violation)
@@ -1111,28 +1138,28 @@ class ViolationDetector:
             bottom_center_pos = (int((x1 + x2) / 2), int(y2))
 
             wrong_way_violation = self.detect_wrong_way(
-                track_id, bottom_center_pos, timestamp, bbox, frame
+                track_id, bottom_center_pos, timestamp, bbox, frame, confidence, vehicle_type
             )
             if wrong_way_violation:
                 frame_violations.append(wrong_way_violation)
-            
+
             # 3. 跨实线变道检测
             lane_change_violation = self.detect_lane_change_violation(
-                track_id, bbox, frame, timestamp
+                track_id, bbox, frame, timestamp, confidence, vehicle_type
             )
             if lane_change_violation:
                 frame_violations.append(lane_change_violation)
-            
+
             # 4. 左转待转区违规检测
             waiting_area_violation = self.detect_waiting_area_violation(
-                track_id, bbox, frame, timestamp
+                track_id, bbox, frame, timestamp, confidence, vehicle_type
             )
             if waiting_area_violation:
                 frame_violations.append(waiting_area_violation)
 
         return frame_violations
 
-    def detect_waiting_area_violation(self, track_id: int, bbox, frame, timestamp):
+    def detect_waiting_area_violation(self, track_id: int, bbox, frame, timestamp, confidence=0.95, vehicle_type='car'):
         """
         检测左转待转区违规
         
@@ -1218,11 +1245,13 @@ class ViolationDetector:
                             screenshot_path = self.save_violation_screenshot(
                                 frame, bbox, violation_id, "waiting_area"
                             )
-                            
+
                             violation_record = {
                                 'id': violation_id,
                                 'type': 'waiting_area_red_entry',
                                 'track_id': track_id,
+                                'confidence': confidence,
+                                'vehicle_type': vehicle_type,
                                 'direction': direction,
                                 'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
                                 'location': vehicle_center,
@@ -1262,11 +1291,13 @@ class ViolationDetector:
                         screenshot_path = self.save_violation_screenshot(
                             frame, bbox, violation_id, "waiting_area"
                         )
-                        
+
                         violation_record = {
                             'id': violation_id,
                             'type': 'waiting_area_illegal_exit',
                             'track_id': track_id,
+                            'confidence': confidence,
+                            'vehicle_type': vehicle_type,
                             'direction': direction,
                             'timestamp': datetime.fromtimestamp(timestamp / 1000.0).isoformat(),
                             'location': vehicle_center,

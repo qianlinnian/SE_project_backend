@@ -38,6 +38,25 @@ class VehicleTracker:
 
         print("车辆追踪器初始化成功！")
 
+    def _map_coco_class_to_vehicle_type(self, coco_class_id: int) -> str:
+        """
+        将COCO数据集的类别ID映射为车辆类型字符串
+
+        Args:
+            coco_class_id: COCO类别ID
+
+        Returns:
+            车辆类型字符串 (car, motorcycle, bus, truck, other)
+        """
+        mapping = {
+            2: 'car',        # 小汽车
+            3: 'motorcycle', # 摩托车
+            5: 'bus',        # 公交车
+            7: 'bus'         # ✅ YOLO 常把 bus 误识别为 truck，所以将 truck 也映射为 bus
+            # 7: 'truck'     # 原始映射（如果需要区分 truck，恢复这行并注释上面一行）
+        }
+        return mapping.get(coco_class_id, 'other')
+
     def detect_and_track(self, frame):
         """
         检测并追踪车辆
@@ -46,8 +65,10 @@ class VehicleTracker:
             frame: 输入帧图像
 
         Returns:
-            list: 追踪结果 [(track_id, bbox), ...]
+            list: 追踪结果 [(track_id, bbox, confidence, vehicle_type), ...]
                   bbox = (x1, y1, x2, y2)
+                  confidence = 置信度 (0-1)
+                  vehicle_type = 车辆类型 (car, motorcycle, bus, truck)
         """
         # 使用 YOLOv8 的内置追踪功能
         results = self.model.track(
@@ -62,7 +83,7 @@ class VehicleTracker:
         detections = []
 
         if results[0].boxes is not None and results[0].boxes.id is not None:
-            # 获取边界框、追踪ID、置信度
+            # 获取边界框、追踪ID、置信度、类别
             boxes = results[0].boxes.xyxy.cpu().numpy()  # (x1, y1, x2, y2)
             track_ids = results[0].boxes.id.cpu().numpy().astype(int)
             confidences = results[0].boxes.conf.cpu().numpy()
@@ -70,7 +91,10 @@ class VehicleTracker:
 
             for box, track_id, conf, cls in zip(boxes, track_ids, confidences, classes):
                 x1, y1, x2, y2 = box
-                detections.append((track_id, (x1, y1, x2, y2)))
+                vehicle_type = self._map_coco_class_to_vehicle_type(cls)
+
+                # 返回: (track_id, bbox, confidence, vehicle_type)
+                detections.append((track_id, (x1, y1, x2, y2), float(conf), vehicle_type))
 
                 # 记录轨迹历史
                 center = ((x1 + x2) / 2, (y1 + y2) / 2)
@@ -91,17 +115,26 @@ class VehicleTracker:
 
         Args:
             frame: 输入帧图像
-            detections: 检测结果 [(track_id, bbox), ...]
+            detections: 检测结果 [(track_id, bbox, confidence, vehicle_type), ...]
+                       或旧格式: [(track_id, bbox), ...]
 
         Returns:
             frame: 绘制后的图像
         """
-        for track_id, (x1, y1, x2, y2) in detections:
+        for detection in detections:
+            # 兼容新旧格式
+            if len(detection) == 4:
+                track_id, (x1, y1, x2, y2), confidence, vehicle_type = detection
+                label = f"ID:{track_id} {vehicle_type} {confidence:.2f}"
+            else:
+                # 旧格式兼容
+                track_id, (x1, y1, x2, y2) = detection
+                label = f"ID:{track_id}"
+
             # 绘制边界框
             cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
 
-            # 绘制 ID 标签
-            label = f"ID:{track_id}"
+            # 绘制标签
             cv2.putText(
                 frame, label, (int(x1), int(y1) - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2
@@ -175,11 +208,11 @@ class SimpleTrafficLightDetector:
                 'west_bound': 'red',
                 'east_bound': 'red'
             }
-        
+
         # 检测状态是否变化
         changed = current_states != self.previous_states
         self.previous_states = current_states.copy()
-        
+
         return current_states, changed
 
 

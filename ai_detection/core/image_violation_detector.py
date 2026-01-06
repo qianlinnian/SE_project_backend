@@ -73,6 +73,25 @@ class ImageViolationDetector:
                 traceback.print_exc()
                 self.enable_api = False
 
+    def _map_coco_class_to_vehicle_type(self, coco_class_id: int) -> str:
+        """
+        将COCO数据集的类别ID映射为车辆类型字符串
+
+        Args:
+            coco_class_id: COCO类别ID
+
+        Returns:
+            车辆类型字符串 (car, motorcycle, bus, truck, other)
+        """
+        mapping = {
+            2: 'car',        # 小汽车
+            3: 'motorcycle', # 摩托车
+            5: 'bus',        # 公交车
+            7: 'bus'         # ✅ YOLO 常把 bus 误识别为 truck，所以将 truck 也映射为 bus
+            # 7: 'truck'     # 原始映射（如果需要区分 truck，恢复这行并注释上面一行）
+        }
+        return mapping.get(coco_class_id, 'other')
+
     def detect_vehicles(self, image, conf_threshold=0.15, debug=False):
         """
         检测图片中的车辆
@@ -83,8 +102,9 @@ class ImageViolationDetector:
             debug: 是否显示调试信息
 
         Returns:
-            list: 检测到的车辆列表 [(bbox, confidence), ...]
+            list: 检测到的车辆列表 [(bbox, confidence, vehicle_type), ...]
                  bbox = (x1, y1, x2, y2)
+                 vehicle_type = 车辆类型字符串 (car, motorcycle, bus, truck)
         """
         # YOLO检测
         results = self.model(image, conf=conf_threshold, verbose=False)
@@ -105,12 +125,14 @@ class ImageViolationDetector:
                 if debug:
                     x1_d, y1_d, x2_d, y2_d = box.xyxy[0].cpu().numpy()
                     is_vehicle = "车辆" if cls in vehicle_classes else "非车辆"
-                    print(f"  [YOLO] {is_vehicle} 类别: {cls}, 置信度: {confidence:.2f}, bbox: ({int(x1_d)},{int(y1_d)},{int(x2_d)},{int(y2_d)})")
+                    vehicle_type = self._map_coco_class_to_vehicle_type(cls)
+                    print(f"  [YOLO] {is_vehicle} 类别: {cls} ({vehicle_type}), 置信度: {confidence:.2f}, bbox: ({int(x1_d)},{int(y1_d)},{int(x2_d)},{int(y2_d)})")
 
                 if cls in vehicle_classes:
                     # 获取边界框坐标
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    vehicles.append(((int(x1), int(y1), int(x2), int(y2)), confidence))
+                    vehicle_type = self._map_coco_class_to_vehicle_type(cls)
+                    vehicles.append(((int(x1), int(y1), int(x2), int(y2)), confidence, vehicle_type))
 
         if debug and len(vehicles) == 0:
             print(f"  [YOLO] 警告: 没有检测到车辆! 尝试降低置信度阈值 (当前: {conf_threshold})")
@@ -154,11 +176,11 @@ class ImageViolationDetector:
             print(f"  🔍 检测到 {len(vehicles)} 辆车")
 
         # 遍历每辆车
-        for idx, (bbox, confidence) in enumerate(vehicles):
+        for idx, (bbox, confidence, vehicle_type) in enumerate(vehicles):
             x1, y1, x2, y2 = bbox
 
             if debug:
-                print(f"  🚗 车辆 {idx}: bbox={bbox}, confidence={confidence:.2f}")
+                print(f"  🚗 车辆 {idx}: type={vehicle_type}, bbox={bbox}, confidence={confidence:.2f}")
 
             # 检查车辆是否在停止线内(闯红灯)
             for direction, data in self.rois.items():
@@ -213,6 +235,7 @@ class ImageViolationDetector:
                             'id': violation_id,
                             'type': 'red_light_running',
                             'vehicle_index': idx,
+                            'vehicle_type': vehicle_type,
                             'direction': direction,
                             'confidence': confidence,
                             'timestamp': datetime.now().isoformat(),
@@ -262,13 +285,13 @@ class ImageViolationDetector:
                 print(f"     - {sl['name']}: {sl['coordinates']}")
 
         # 遍历每辆车
-        for idx, (bbox, confidence) in enumerate(vehicles):
+        for idx, (bbox, confidence, vehicle_type) in enumerate(vehicles):
             x1, _, x2, y2 = bbox
             # 使用车辆底部中心点作为判断点(更准确)
             vehicle_bottom_center = (int((x1 + x2) / 2), int(y2))
 
             if debug:
-                print(f"  🚗 车辆 {idx}: bbox={bbox}, bottom_center={vehicle_bottom_center}")
+                print(f"  🚗 车辆 {idx}: type={vehicle_type}, bbox={bbox}, bottom_center={vehicle_bottom_center}")
 
             # 检查车辆与每条实线的关系
             for solid_line in solid_lines:
@@ -299,6 +322,7 @@ class ImageViolationDetector:
                         'id': violation_id,
                         'type': 'lane_change_across_solid_line',
                         'vehicle_index': idx,
+                        'vehicle_type': vehicle_type,
                         'solid_line': line_name,
                         'direction': solid_line['direction'],
                         'confidence': confidence,
@@ -425,7 +449,7 @@ class ImageViolationDetector:
         return filepath
 
     def _map_direction_to_api(self, direction: str) -> str:
-        """将内部方向格式转换为后端API格式"""
+        """将内部方��格式转换为后端API格式"""
         mapping = {
             'north_bound': 'NORTH',
             'south_bound': 'SOUTH',
@@ -455,12 +479,14 @@ class ImageViolationDetector:
             direction = violation_record.get('direction', 'north_bound')
             vehicle_idx = violation_record.get('vehicle_index', 0)
             plate_number = f"UNIDENTIFIED_{vehicle_idx:03d}"    #车牌
+            vehicle_type = violation_record.get('vehicle_type', 'other')
 
             api_data = {
                 'intersectionId': self.intersection_id,
                 'direction': self._map_direction_to_api(direction),
                 'turnType': 'STRAIGHT',
                 'plateNumber': plate_number,
+                'vehicleType': vehicle_type,
                 'violationType': self._map_violation_type_to_api(violation_record.get('type', '')),
                 'imageUrl': image_url,
                 'aiConfidence': violation_record.get('confidence', 0.95),
